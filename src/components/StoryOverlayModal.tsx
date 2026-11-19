@@ -52,7 +52,9 @@ export const StoryOverlayModal: React.FC<StoryOverlayModalProps> = ({
             </div>
           </div>
 
-          {story.kind === 'opening' && (
+          {(story.kind === 'opening' ||
+            story.kind === 'dungeon_intro' ||
+            story.kind === 'dungeon_rescue') && (
             <button
               type="button"
               onClick={onSkip}
@@ -139,11 +141,21 @@ export const StoryOverlayModal: React.FC<StoryOverlayModalProps> = ({
               <span>
                 {story.kind === 'area_cleared'
                   ? 'Hore! Lanjutkan Petualangan'
+                  : story.kind === 'dungeon_intro'
+                  ? story.step >= 2
+                    ? 'Mulai Petualangan Gua!'
+                    : 'Lanjut'
+                  : story.kind === 'dungeon_rescue'
+                  ? story.step >= 2
+                    ? 'Hore! Wilayah Bebas!'
+                    : 'Lanjut'
                   : story.step >= 3
                   ? 'Mulai Menjelajah Hutan Kata!'
                   : 'Lanjut'}
               </span>
-              {story.kind === 'opening' && story.step < 3 && <ArrowRight className="h-4 w-4" />}
+              {((story.kind === 'opening' && story.step < 3) ||
+                ((story.kind === 'dungeon_intro' || story.kind === 'dungeon_rescue') &&
+                  story.step < 2)) && <ArrowRight className="h-4 w-4" />}
             </button>
           )}
         </div>

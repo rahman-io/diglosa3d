@@ -1097,6 +1097,51 @@ function drawIcon(
     ctx.fillRect(-5, -0.5, 10, 1.4);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(-1.2, -1.2, 2.4, 2.4);
+  } else if (kind === 'guardian') {
+    // Friendly Cave Guardian badge
+    ctx.fillStyle = liberated ? '#22c55e' : color;
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, 5.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath();
+    ctx.arc(0, -0.6, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'key') {
+    // Glowing Golden Prison Key
+    const glow = 7.8 + Math.sin(pulse * 6) * 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, glow, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.32)';
+    ctx.fill();
+    ctx.fillStyle = '#facc15';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(-2.6, 0, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillRect(0, -1.0, 5.4, 2.0);
+    ctx.strokeRect(0, -1.0, 5.4, 2.0);
+    ctx.fillRect(3.2, 1.0, 1.6, 2.2);
+  } else if (kind === 'prison') {
+    // Hidden Prison Cage icon
+    ctx.fillStyle = liberated ? '#16a34a' : needsHelp ? '#f59e0b' : '#475569';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.6;
+    ctx.fillRect(-5, -5, 10, 10);
+    ctx.strokeRect(-5, -5, 10, 10);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(-3.2, -3.5, 1.2, 7);
+    ctx.fillRect(-0.6, -3.5, 1.2, 7);
+    ctx.fillRect(2.0, -3.5, 1.2, 7);
+    if (needsHelp && !liberated) {
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(-1.5, -1.5, 3, 3);
+    }
   } else if (kind === 'door') {
     ctx.fillStyle = liberated ? '#22c55e' : '#fde047';
     ctx.strokeStyle = '#0f172a';

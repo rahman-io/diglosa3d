@@ -77,6 +77,9 @@ const INITIAL_HUD: RpgHudSnapshot = {
   nearbyNpcId: null,
   nearbyMonsterId: null,
   nearbyDoorIndex: null,
+  nearbyDungeonGuardian: false,
+  nearPrisonKey: false,
+  nearHiddenPrison: false,
   nearPortal: false,
   nearDungeonExit: false,
   portalUnlocked: true,
@@ -465,7 +468,7 @@ function DiglosaRpgApp() {
       <StoryOverlayModal
         story={hud.phase === 'story' ? hud.storyDialog : null}
         onAdvance={() => engineRef.current?.advanceStory()}
-        onSkip={() => engineRef.current?.skipOpeningStory()}
+        onSkip={() => engineRef.current?.skipStory()}
         onDefeatChoice={(returnToZone) => engineRef.current?.resolveDefeatExitChoice(returnToZone)}
       />
 

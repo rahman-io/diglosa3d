@@ -396,6 +396,234 @@ export const DOOR_RESTORED_STORY: Record<ZoneId, string[]> = {
   ],
 };
 
+export interface ZoneCaveStoryDef {
+  guardianId: string;
+  guardianName: string;
+  captiveName: string;
+  captiveRole: string;
+  captiveColor: number;
+  captiveKind: 'girl' | 'mother' | 'fox_kit' | 'student' | 'spirit';
+  prisonCorner: 'nw' | 'ne';
+  accentColor: string;
+  introSteps: Array<{
+    speakerName: string;
+    speakerRole: string;
+    textEn: string;
+    textId: string;
+  }>;
+  rescueCaptiveEn: string;
+  rescueCaptiveId: string;
+  rescueGuardianEn: string;
+  rescueGuardianId: string;
+}
+
+export const ZONE_CAVE_STORIES: Record<ZoneId, ZoneCaveStoryDef> = {
+  desa_sapaan: {
+    guardianId: 'npc_tetua',
+    guardianName: 'Kakek Sapa',
+    captiveName: 'Rani',
+    captiveRole: 'Cucu Kakek Sapa',
+    captiveColor: 0xf472b6,
+    captiveKind: 'girl',
+    prisonCorner: 'nw',
+    accentColor: '#f59e0b',
+    introSteps: [
+      {
+        speakerName: 'Masuk ke Gua Desa Sapaan',
+        speakerRole: 'Adegan Gua · Babak 1',
+        textEn: 'Hoot steps out of the cave entrance into the misty stone hall, where old Kakek Sapa waits trembling by the wall.',
+        textId: 'Hoot melangkah masuk dari pintu gua menuju ruang batu berkabut. Di sana, Kakek Sapa berdiri gemetar dengan suara terbata-bata.',
+      },
+      {
+        speakerName: 'Kakek Sapa (Terbata-bata)',
+        speakerRole: 'Penjaga Gua Desa Sapaan',
+        textEn: 'H-h-hoot... G-good... m-morn... My words are broken! Monsters locked my granddaughter Rani inside a secret prison cell hidden behind cave rocks!',
+        textId: 'H-hoot… s-selamat… pa-pagi… Suaraku macet karena kata sapaan desa dirampas! Cucuku Rani disekap di kurungan tersembunyi di balik bebatuan sudut gua!',
+      },
+      {
+        speakerName: 'Misi Gua Desa Sapaan',
+        speakerRole: 'Petunjuk Penjaga Gua',
+        textEn: 'Open all 5 doors to restore greetings, defeat Gumpal Salam to drop the golden Prison Key, then break the hidden rocks and rescue Rani!',
+        textId: 'Buka 5 pintu untuk memulihkan kata sapaan (Hello → Goodbye), kalahkan Bos Gumpal Salam untuk mendapat Kunci Penjara, lalu cari kurungan tersembunyi untuk menyelamatkan Rani!',
+      },
+    ],
+    rescueCaptiveEn: 'Hoot! You found the secret cell and saved me! Let us run back to Grandpa right now!',
+    rescueCaptiveId: 'Kak Hoot! Kamu berhasil menemukan penjara rahasia dan menyelamatkanku! Ayo kita temui Kakek Sapa!',
+    rescueGuardianEn: 'Rani! My voice is clear again! Thank you, Hoot—always greet first, that is the truest sword!',
+    rescueGuardianId: 'Rani cucuku! Suaraku sudah pulih dan jernih lagi! Terima kasih banyak, Hoot! Ingatlah: “Sapalah dulu. Itulah pedang yang sebenarnya.”',
+  },
+  pasar_rasa: {
+    guardianId: 'npc_koki',
+    guardianName: 'Koki Mimi',
+    captiveName: 'Mama (Ibu Mimi)',
+    captiveRole: 'Ibu Koki Mimi',
+    captiveColor: 0xfb923c,
+    captiveKind: 'mother',
+    prisonCorner: 'ne',
+    accentColor: '#ef4444',
+    introSteps: [
+      {
+        speakerName: 'Masuk ke Gua Pasar Rasa',
+        speakerRole: 'Adegan Gua · Babak 2',
+        textEn: 'Brown spice-less fog fills the cavern. Hoot walks toward Koki Mimi, who leans weakly beside the entrance.',
+        textId: 'Kabut kecokelatan tanpa aroma masakan menyelimuti gua. Hoot berjalan menghampiri Koki Mimi yang tampak lemas dan hampir tak bersuara.',
+      },
+      {
+        speakerName: 'Koki Mimi (Lemas)',
+        speakerRole: 'Penjaga Gua Pasar Rasa',
+        textEn: 'Hoot... I cannot even pronounce r-rice or s-soup... Lendir Kuali hid my sick Mama inside a locked secret pantry cell in this cave!',
+        textId: 'Hoot… aku bahkan tak sanggup mengucap r-rice atau s-soup… Lendir Kuali menyembunyikan Mama yang sakit di dalam sel kurungan tersembunyi di sudut gua ini!',
+      },
+      {
+        speakerName: 'Misi Gua Pasar Rasa',
+        speakerRole: 'Petunjuk Penjaga Gua',
+        textEn: 'Restore Rice, Soup, Tea, Vegetables, and Fruit across 5 doors, crush Lendir Kuali for the Prison Key, and free Mama!',
+        textId: 'Pulihkan bahan makanan lewat 5 pintu, kalahkan Lendir Kuali hingga Kunci Penjara jatuh, lalu buka kurungan tersembunyi untuk mengobati & menyelamatkan Mama!',
+      },
+    ],
+    rescueCaptiveEn: 'Thank you, brave Hoot! Warm soup aroma is back—I feel strong and healthy again!',
+    rescueCaptiveId: 'Terima kasih, Hoot yang pemberani! Aroma sup hangat kembali tercium—aku sudah merasa sehat dan kuat lagi!',
+    rescueGuardianEn: 'Mama is healed and my voice is back! Thank you, Hoot! Eat first before you fight!',
+    rescueGuardianId: 'Mama sembuh dan suaraku kembali lancar! Terima kasih banyak, Hoot! Pesanku selalu: “Makan dulu. Baru bertarung.”',
+  },
+  hutan_satwa: {
+    guardianId: 'npc_rubah',
+    guardianName: 'Rimba si Rubah',
+    captiveName: 'Kiki',
+    captiveRole: 'Adik Rimba si Rubah',
+    captiveColor: 0xf97316,
+    captiveKind: 'fox_kit',
+    prisonCorner: 'nw',
+    accentColor: '#10b981',
+    introSteps: [
+      {
+        speakerName: 'Masuk ke Gua Hutan Satwa',
+        speakerRole: 'Adegan Gua · Babak 3',
+        textEn: 'Deep inside the silent mossy cavern, Hoot rushes to Rimba the Fox, whose voice cracks with worry.',
+        textId: 'Di gua lumut yang terlalu sunyi tanpa kicau satwa, Hoot berjalan mendekati Rimba si Rubah yang bersuara serak penuh cemas.',
+      },
+      {
+        speakerName: 'Rimba si Rubah (Cemas)',
+        speakerRole: 'Penjaga Gua Hutan Satwa',
+        textEn: 'The woods lost every animal word! Thorns trapped my little sibling Kiki inside a hidden cage deep behind the corner rocks!',
+        textId: 'Rimba kehilangan seluruh kata satwa! Semak berduri mengurung adik kecilku Kiki di sel rahasia di balik bebatuan sudut gua!',
+      },
+      {
+        speakerName: 'Misi Gua Hutan Satwa',
+        speakerRole: 'Petunjuk Penjaga Gua',
+        textEn: 'Free Bird, Fish, Rabbit, Deer, and Butterfly through 5 doors, defeat Semak Gigit to claim the Prison Key, and unlock Kiki’s cage!',
+        textId: 'Bebaskan Bird hingga Butterfly di 5 pintu, tumbangkan Semak Gigit untuk meraih Kunci Penjara, lalu selamatkan Kiki dari kurungan tersembunyi!',
+      },
+    ],
+    rescueCaptiveEn: 'Yip! Thank you, Hoot! The thorns let go—I can run back to big brother Rimba!',
+    rescueCaptiveId: 'Yip! Terima kasih, Hoot! Akar berduri sudah lepas—aku bisa berlari memeluk Kak Rimba!',
+    rescueGuardianEn: 'Kiki is safe! Listen, Hoot—your little sister Lila passed by here wearing a red ribbon. She is so brave!',
+    rescueGuardianId: 'Kiki selamat dan suaraku kembali ceria! Terima kasih, Hoot! Dengar: “Adikmu lewat di sini. Ia berjalan dengan pita merah. Ia pemberani.”',
+  },
+  gerbang_kota: {
+    guardianId: 'npc_penjaga',
+    guardianName: 'Penjaga Gerbang',
+    captiveName: 'Dewi',
+    captiveRole: 'Putri Penjaga Gerbang',
+    captiveColor: 0x38bdf8,
+    captiveKind: 'girl',
+    prisonCorner: 'ne',
+    accentColor: '#3b82f6',
+    introSteps: [
+      {
+        speakerName: 'Masuk ke Gua Gerbang Kota',
+        speakerRole: 'Adegan Gua · Babak 4',
+        textEn: 'Gray-blue mist hangs low inside the stone vault. Hoot approaches the Gatekeeper, who freezes stiffly at his post.',
+        textId: 'Kabut biru kelabu menghentikan segalanya di ruang bawah gerbang. Hoot berjalan menghampiri Penjaga Gerbang yang berdiri kaku kebingungan.',
+      },
+      {
+        speakerName: 'Penjaga Gerbang (Linglung)',
+        speakerRole: 'Penjaga Gua Gerbang Kota',
+        textEn: 'I... I forgot the password to open the gate! My daughter Dewi is locked inside a hidden cell near the dark corner, and I cannot leave my post!',
+        textId: 'Aku… aku lupa kata rahasia untuk membuka pintu! Putriku Dewi terkurung di penjara tersembunyi di sudut gua, dan aku tak boleh meninggalkan posku!',
+      },
+      {
+        speakerName: 'Misi Gua Gerbang Kota',
+        speakerRole: 'Petunjuk Penjaga Gua',
+        textEn: 'Restore Home, School, Office, Market, and Station, defeat Bayangan Gerbang to seize the Prison Key, and bring Dewi home!',
+        textId: 'Pulihkan kata tempat & profesi lewat 5 pintu, kalahkan Bayangan Gerbang untuk merebut Kunci Penjara, lalu buka kurungan Dewi!',
+      },
+    ],
+    rescueCaptiveEn: 'Hoot! You unlocked the gate and rescued me! Dad is waiting right by the entrance!',
+    rescueCaptiveId: 'Kak Hoot! Kamu membuka kunci penjara dan menyelamatkanku! Ayah pasti sangat merindukanku di depan!',
+    rescueGuardianEn: 'Dewi! Now I remember the secret word: “Open!” Thank you from the bottom of my heart, Hoot!',
+    rescueGuardianId: 'Dewi putriku! Akhirnya aku ingat kata rahasianya: “Buka. Itulah katanya. Terima kasih!” Seluruh kota kembali bergerak!',
+  },
+  menara_waktu: {
+    guardianId: 'npc_penyihir',
+    guardianName: 'Penjaga Waktu',
+    captiveName: 'Laras (Murid Menara)',
+    captiveRole: 'Murid Penjaga Waktu',
+    captiveColor: 0xa78bfa,
+    captiveKind: 'student',
+    prisonCorner: 'nw',
+    accentColor: '#8b5cf6',
+    introSteps: [
+      {
+        speakerName: 'Masuk ke Gua Menara Waktu',
+        speakerRole: 'Adegan Gua · Babak 5',
+        textEn: 'Frozen golden dust floats in silence. Hoot walks up to the Timekeeper, who stares blankly at a stopped pocket watch.',
+        textId: 'Debu emas waktu membeku di udara gua. Hoot berjalan menuju Penjaga Waktu yang terus bergumam murung menatap jam yang terhenti.',
+      },
+      {
+        speakerName: 'Penjaga Waktu (Murung)',
+        speakerRole: 'Penjaga Gua Menara Waktu',
+        textEn: 'What time is it? Seven o’clock... Always seven... Jam Pasir Liar trapped my dear student Laras inside a hidden time-cage before I could say goodbye!',
+        textId: 'Jam berapa sekarang? Pukul tujuh… terus pukul tujuh… Jam Pasir Liar mengurung murid kesayanganku Laras di sel waktu tersembunyi sebelum aku sempat berpamitan!',
+      },
+      {
+        speakerName: 'Misi Gua Menara Waktu',
+        speakerRole: 'Petunjuk Penjaga Gua',
+        textEn: 'Advance the clock from Seven to Eleven across 5 doors, shatter Jam Pasir Liar for the Prison Key, and free Laras!',
+        textId: 'Majukan jarum jam (Seven → Eleven) lewat 5 pintu, hancurkan Jam Pasir Liar untuk merebut Kunci Penjara, lalu selamatkan Laras!',
+      },
+    ],
+    rescueCaptiveEn: 'Thank you, Hoot! Time is flowing again—now I can say a proper goodbye to Master Timekeeper!',
+    rescueCaptiveId: 'Terima kasih, Hoot! Waktu kembali mengalir—akhirnya aku bisa berpamitan dengan layak kepada Guru Penjaga Waktu!',
+    rescueGuardianEn: 'The twelve o’clock bell rings at last! Goodbye, my student—now I can say it with a peaceful heart. Thank you, Hoot!',
+    rescueGuardianId: 'Lonceng pukul dua belas berdentang jernih! “Selamat tinggal, muridku. Sekarang aku bisa mengatakannya.” Terima kasih banyak, Hoot!',
+  },
+  gua_portal: {
+    guardianId: 'npc_portal',
+    guardianName: 'Nyonya Portal',
+    captiveName: 'Peri Suara Portal',
+    captiveRole: 'Suara Terkurung Nyonya Portal',
+    captiveColor: 0xe879f9,
+    captiveKind: 'spirit',
+    prisonCorner: 'ne',
+    accentColor: '#a855f7',
+    introSteps: [
+      {
+        speakerName: 'Masuk ke Gua Portal',
+        speakerRole: 'Adegan Gua · Babak 6 (Final)',
+        textEn: 'Inside the crystal cavern leading to the Palace, Hoot approaches Lady Portal—her lips move, yet not a single sound comes out.',
+        textId: 'Di dalam gua kristal terakhir menuju Istana, Hoot berjalan mendekati Nyonya Portal. Bibirnya bergerak mencoba bicara, tetapi tak ada satu pun suara keluar.',
+      },
+      {
+        speakerName: 'Nyonya Portal (Tak Bersuara)',
+        speakerRole: 'Penjaga Gua Portal',
+        textEn: '(Silent gesture pointing to the dark corner...) Hantu Portal stole my voice spirit and the 5 question words—Who, What, Where, When, Why—and locked my voice inside a hidden cage!',
+        textId: '(Dengan isyarat tangan menunjuk sudut gelap…) Hantu Portal merampas suara Nyonya Portal serta 5 kata tanya (Who, What, Where, When, Why) dan mengurung Peri Suaranya di penjara tersembunyi!',
+      },
+      {
+        speakerName: 'Misi Gua Portal',
+        speakerRole: 'Petunjuk Penjaga Gua',
+        textEn: 'Open all 5 doors to recover every question word, defeat Hantu Portal to drop the Prison Key, and restore Lady Portal’s voice to reach Lila!',
+        textId: 'Buka 5 pintu untuk memulihkan Who hingga Why, kalahkan Hantu Portal untuk meraih Kunci Penjara, lalu bebaskan Peri Suara agar jalan ke Istana & Lila terbuka!',
+      },
+    ],
+    rescueCaptiveEn: 'My voice echoes free again! Let us return to Lady Portal so the royal gate to Lila shines bright!',
+    rescueCaptiveId: 'Gema suara suci kembali bebas! Ayo kembali ke Nyonya Portal agar suara beliau pulih dan gerbang menuju Lila terbuka!',
+    rescueGuardianEn: 'My voice has returned! Now you may ask me anything, Hoot! All six crown shards are ready—go meet Lila in Istana IELTS!',
+    rescueGuardianId: 'Suaraku telah kembali jernih! “Sekarang kamu boleh bertanya apa saja padaku.” Terima kasih, Hoot! Keenam keping mahkota sudah lengkap—temui Lila di Istana IELTS!',
+  },
+};
+
 export const ZONE_ORDER: ZoneId[] = [
   'desa_sapaan',
   'pasar_rasa',

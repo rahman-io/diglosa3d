@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ZONE_DOORS, ZONE_INFO } from '../data/diglosaCatalog';
+import { ZONE_CAVE_STORIES, ZONE_DOORS, ZONE_INFO } from '../data/diglosaCatalog';
 import { CaveBlockKind, DoorDef, MonsterType, ZoneId } from '../types/game';
 import { MaterialPalette } from './materials';
 import { createMinecraftHouse } from './minecraftVillage';
@@ -121,6 +121,16 @@ export interface DungeonArenaRig {
   crackMaterials: THREE.MeshBasicMaterial[];
   crackGeo: THREE.BufferGeometry;
   weaponChest: CaveWeaponChestRig;
+  guardianPos: THREE.Vector3;
+  guardianMesh: THREE.Group;
+  guardianAuraMat: THREE.MeshBasicMaterial;
+  prisonPos: THREE.Vector3;
+  prisonGroup: THREE.Group;
+  prisonBars: THREE.Group;
+  prisonLockMat: THREE.MeshStandardMaterial;
+  captiveMesh: THREE.Group;
+  prisonKeyGroup: THREE.Group;
+  cameraOccluders: THREE.Object3D[];
   disposables: Array<{ dispose: () => void }>;
 }
 
@@ -129,6 +139,7 @@ export interface AcademyHallRig {
   animatables: THREE.Object3D[];
   exitPadPos: THREE.Vector3;
   exitClickable: THREE.Object3D;
+  cameraOccluders: THREE.Object3D[];
 }
 
 function addShadow(group: THREE.Group, palette: MaterialPalette, radius: number): void {
@@ -1211,6 +1222,127 @@ function createCrackOverlayTextures(): THREE.CanvasTexture[] {
   return textures;
 }
 
+export function createCaptiveMesh(
+  kind: 'girl' | 'mother' | 'fox_kit' | 'student' | 'spirit',
+  colorHex: number,
+  palette: MaterialPalette,
+): THREE.Group {
+  const root = new THREE.Group();
+  addShadow(root, palette, 0.72);
+  const skin = palette.getMat(0xfed7aa, 'matte');
+  const outfit = palette.getMat(colorHex, 'matte');
+  const darkEye = palette.getMat(0x0f172a, 'matte');
+
+  if (kind === 'fox_kit') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.72, 0.85), outfit);
+    body.position.y = 0.56;
+    body.castShadow = true;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.6, 0.68), outfit);
+    head.position.set(0, 1.18, 0.16);
+    const earL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.28, 0.14), outfit);
+    earL.position.set(-0.2, 1.56, 0.12);
+    const earR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.28, 0.14), outfit);
+    earR.position.set(0.2, 1.56, 0.12);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.62), palette.getMat(0xf8fafc, 'matte'));
+    tail.position.set(0, 0.62, -0.58);
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
+    eyeL.position.set(-0.15, 1.22, 0.52);
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
+    eyeR.position.set(0.15, 1.22, 0.52);
+    root.add(body, head, earL, earR, tail, eyeL, eyeR);
+    return root;
+  }
+
+  if (kind === 'spirit') {
+    const core = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.55, 0),
+      palette.getMat(colorHex, 'emissive'),
+    );
+    core.position.y = 1.45;
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.68, 0.08, 6, 18),
+      palette.getMat(0xfef08a, 'emissive'),
+    );
+    halo.rotation.x = Math.PI / 2;
+    halo.position.y = 1.45;
+    const baseOrb = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 0.95, 6),
+      palette.getMat(0x7c3aed, 'gloss'),
+    );
+    baseOrb.position.y = 0.65;
+    root.add(baseOrb, core, halo);
+    return root;
+  }
+
+  const heightScale = kind === 'girl' ? 0.82 : 0.96;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.88, 0.44), outfit);
+  torso.position.y = 0.88;
+  torso.castShadow = true;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.64, 0.64), skin);
+  head.position.y = 1.68;
+  head.castShadow = true;
+  const hair = new THREE.Mesh(
+    new THREE.BoxGeometry(0.68, 0.24, 0.68),
+    palette.getMat(kind === 'mother' ? 0x57534e : 0x3b2008, 'matte'),
+  );
+  hair.position.y = 1.98;
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
+  eyeL.position.set(-0.15, 1.68, 0.33);
+  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
+  eyeR.position.set(0.15, 1.68, 0.33);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.45, 0.26), palette.getMat(0x1e293b, 'matte'));
+  legL.position.set(-0.18, 0.24, 0);
+  const legR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.45, 0.26), palette.getMat(0x1e293b, 'matte'));
+  legR.position.set(0.18, 0.24, 0);
+  root.add(legL, legR, torso, head, hair, eyeL, eyeR);
+  if (kind === 'girl') {
+    const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.14, 0.14), palette.getMat(0xe11d48, 'matte'));
+    ribbon.position.set(0.24, 2.1, 0.12);
+    root.add(ribbon);
+  }
+  root.scale.setScalar(heightScale);
+  return root;
+}
+
+export function createPrisonKeyMesh(palette: MaterialPalette): THREE.Group {
+  const root = new THREE.Group();
+  const goldMat = palette.getMat(0xfacc15, 'metal');
+  const glowMat = palette.getMat(0xfef08a, 'emissive');
+
+  const beaconRing = new THREE.Mesh(
+    new THREE.RingGeometry(1.15, 1.55, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0xfacc15,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    }),
+  );
+  beaconRing.rotation.x = -Math.PI / 2;
+  beaconRing.position.y = 0.06;
+
+  const keyPivot = new THREE.Group();
+  keyPivot.position.y = 1.45;
+  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.1, 8, 16), goldMat);
+  bow.position.x = -0.38;
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.14, 0.14), goldMat);
+  shaft.position.x = 0.2;
+  const tooth1 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.24, 0.14), goldMat);
+  tooth1.position.set(0.48, -0.14, 0);
+  const tooth2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.14), goldMat);
+  tooth2.position.set(0.28, -0.11, 0);
+  const coreGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glowMat);
+  coreGem.position.set(-0.38, 0, 0);
+  keyPivot.add(bow, shaft, tooth1, tooth2, coreGem);
+  keyPivot.userData.animKind = 'bob';
+  keyPivot.userData.baseY = 1.45;
+  keyPivot.userData.phase = 0.2;
+
+  root.add(beaconRing, keyPivot);
+  root.userData.keyPivot = keyPivot;
+  return root;
+}
+
 // 10. Minecraft-Style 3D Voxel Cave Arena (with Roof, Stalactites, Mineable Blocks & 5 Mission Doors!)
 export function createDungeonEnvironment(
   zoneId: ZoneId,
@@ -1220,6 +1352,7 @@ export function createDungeonEnvironment(
   const animatables: THREE.Object3D[] = [];
   const caveBlocks: CaveBlockDef[] = [];
   const caveColliders: CaveStaticCollider[] = [];
+  const cameraOccluders: THREE.Object3D[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
   const exitPadPos = new THREE.Vector3(0, 0, 17);
 
@@ -1309,6 +1442,7 @@ export function createDungeonEnvironment(
   const ceilingSlab = new THREE.Mesh(new THREE.BoxGeometry(45, 0.8, 45), roofMat);
   ceilingSlab.position.y = 10.0;
   group.add(ceilingSlab);
+  cameraOccluders.push(ceilingSlab);
 
   const ringHex =
     zoneId === 'gua_portal'
@@ -1339,6 +1473,7 @@ export function createDungeonEnvironment(
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
+    cameraOccluders.push(m);
   };
   addWall(0, -21.5, 45, wallHeight, 2);
   addWall(-21.5, 0, 2, wallHeight, 45);
@@ -1393,10 +1528,15 @@ export function createDungeonEnvironment(
     pillar.castShadow = true;
     pillar.receiveShadow = true;
     group.add(pillar);
+    cameraOccluders.push(pillar);
     caveColliders.push({ x: px, z: pz, halfW: 1.0 });
   });
 
-  // Mineable Minecraft-style Voxel Blocks (2x2.2x2) guarding shortcuts & hidden ores!
+  const caveStory = ZONE_CAVE_STORIES[zoneId];
+  const prisonX = caveStory.prisonCorner === 'nw' ? -17.4 : 17.4;
+  const prisonZ = -17.4;
+
+  // Mineable Minecraft-style Voxel Blocks (2x2.2x2) guarding shortcuts, ores & hidden prison!
   const blockLayout: Array<[number, number, CaveBlockKind]> = [
     // Left Wing Barricade & Secret Alcove
     [-10, 8, 'moss_dirt'],
@@ -1418,11 +1558,20 @@ export function createDungeonEnvironment(
     [-2, -4, 'stone'],
     [0, -4, 'word_seal'],
     [2, -4, 'stone'],
-    // Deep North Corner Ore Veins & Segel Kata
-    [-18, -16, 'diamond_ore'],
-    [-16, -18, 'moss_dirt'],
-    [18, -16, 'diamond_ore'],
-    [16, -18, 'moss_dirt'],
+    // Hidden Prison Alcove Concealed Wall + Opposite Corner Ores
+    ...(caveStory.prisonCorner === 'nw'
+      ? ([
+          [-14.6, -17.2, 'stone'],
+          [-17.2, -14.6, 'moss_dirt'],
+          [18, -16, 'diamond_ore'],
+          [16, -18, 'moss_dirt'],
+        ] as Array<[number, number, CaveBlockKind]>)
+      : ([
+          [-18, -16, 'diamond_ore'],
+          [-16, -18, 'moss_dirt'],
+          [14.6, -17.2, 'stone'],
+          [17.2, -14.6, 'moss_dirt'],
+        ] as Array<[number, number, CaveBlockKind]>)),
     [-9, -16, 'word_seal'],
     [9, -16, 'word_seal'],
     [-18, -12, 'heart_ore'],
@@ -1554,6 +1703,7 @@ export function createDungeonEnvironment(
   animatables.push(craftOrb);
   craftStation.add(tableBase, tableTop, furnaceBody, furnaceMouth, craftOrb);
   group.add(craftStation);
+  cameraOccluders.push(tableBase, furnaceBody);
   caveColliders.push({ x: craftingTablePos.x, z: craftingTablePos.z, halfW: 1.2 });
 
   blockLayout.forEach(([bx, bz, kind], idx) => {
@@ -1705,6 +1855,7 @@ export function createDungeonEnvironment(
     dRig.orbMesh.userData.phase = def.index * 0.9;
     animatables.push(dRig.orbMesh);
     group.add(dRig.group);
+    cameraOccluders.push(dRig.group);
     return dRig;
   });
 
@@ -1724,6 +1875,7 @@ export function createDungeonEnvironment(
   archR.position.set(2.3, 2.2, 0);
   const archTop = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.9, 1.0), palette.getMat(0x334155, 'matte'));
   archTop.position.set(0, 4.6, 0);
+  cameraOccluders.push(archL, archR, archTop);
   const exitRing = new THREE.Mesh(
     new THREE.TorusGeometry(1.75, 0.18, 8, 24),
     palette.getMat(0x22d3ee, 'emissive'),
@@ -1757,18 +1909,17 @@ export function createDungeonEnvironment(
   torchPreview.visible = false;
   group.add(torchPreview);
 
-  // Random Hidden Cave Weapon Chest (spawns in a randomized alcove every cave run!)
-  const chestSpots: Array<[number, number]> = [
+  // Random Hidden Cave Weapon Chest (spawns in an alcove away from the Hidden Prison!)
+  const safeChestSpots: Array<[number, number]> = [
     [-17, 15],
     [17, 15],
     [-17, -2],
     [17, -2],
-    [-17, -17],
-    [17, -17],
+    caveStory.prisonCorner === 'nw' ? [17, -17] : [-17, -17],
     [-14, 11],
     [14, 11],
   ];
-  const [chestX, chestZ] = chestSpots[Math.floor(Math.random() * chestSpots.length)];
+  const [chestX, chestZ] = safeChestSpots[Math.floor(Math.random() * safeChestSpots.length)];
   let chestY = 0;
   for (const p of platforms) {
     if (Math.abs(chestX - p.x) <= p.halfW && Math.abs(chestZ - p.z) <= p.halfD) {
@@ -1811,6 +1962,86 @@ export function createDungeonEnvironment(
     collected: false,
   };
 
+  // Cave Guardian NPC standing inside the cave entrance foyer
+  const guardianPos = new THREE.Vector3(4.8, 0, 11.8);
+  const guardianMesh = createZoneNpc(caveStory.guardianId, palette);
+  guardianMesh.position.copy(guardianPos);
+  guardianMesh.rotation.y = -0.65;
+  guardianMesh.userData.caveGuardian = true;
+  const guardianAuraMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(caveStory.accentColor),
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.72,
+  });
+  const guardianRingGeo = new THREE.RingGeometry(1.1, 1.42, 22);
+  const guardianAura = new THREE.Mesh(guardianRingGeo, guardianAuraMat);
+  guardianAura.rotation.x = -Math.PI / 2;
+  guardianAura.position.y = 0.07;
+  guardianMesh.add(guardianAura);
+  disposables.push(guardianAuraMat, guardianRingGeo);
+  group.add(guardianMesh);
+
+  // Hidden Prison Cell in the deep corner alcove with Captive Character inside!
+  const prisonPos = new THREE.Vector3(prisonX, 0, prisonZ);
+  const prisonGroup = new THREE.Group();
+  prisonGroup.position.copy(prisonPos);
+  prisonGroup.userData.hiddenPrison = true;
+
+  const cellPad = new THREE.Mesh(
+    new THREE.BoxGeometry(3.6, 0.22, 3.6),
+    palette.getMat(0x334155, 'matte'),
+  );
+  cellPad.position.y = 0.11;
+  cellPad.receiveShadow = true;
+  prisonGroup.add(cellPad);
+
+  const prisonBars = new THREE.Group();
+  const barMat = palette.getMat(0x64748b, 'metal');
+  const prisonLockMat = new THREE.MeshStandardMaterial({
+    color: 0xef4444,
+    emissive: 0xdc2626,
+    emissiveIntensity: 0.9,
+    roughness: 0.35,
+    metalness: 0.4,
+  });
+  disposables.push(prisonLockMat);
+
+  const barCoords: Array<[number, number]> = [
+    [-1.55, -1.55], [-0.55, -1.55], [0.55, -1.55], [1.55, -1.55],
+    [-1.55, 1.55], [-0.55, 1.55], [0.55, 1.55], [1.55, 1.55],
+    [-1.55, -0.55], [-1.55, 0.55],
+    [1.55, -0.55], [1.55, 0.55],
+  ];
+  barCoords.forEach(([bx, bz]) => {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.2, 0.16), barMat);
+    bar.position.set(bx, 1.7, bz);
+    bar.castShadow = true;
+    prisonBars.add(bar);
+  });
+  const cageTop = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.28, 3.5), barMat);
+  cageTop.position.y = 3.35;
+  const padlock = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.78, 0.35), prisonLockMat);
+  padlock.position.set(0, 1.65, 1.62);
+  prisonBars.add(cageTop, padlock);
+  prisonGroup.add(prisonBars);
+
+  const captiveMesh = createCaptiveMesh(caveStory.captiveKind, caveStory.captiveColor, palette);
+  captiveMesh.position.set(0, 0.22, 0);
+  captiveMesh.rotation.y = caveStory.prisonCorner === 'nw' ? 0.75 : -0.75;
+  prisonGroup.add(captiveMesh);
+  group.add(prisonGroup);
+
+  // Golden Prison Key (dropped in center boss arena upon boss defeat)
+  const prisonKeyGroup = createPrisonKeyMesh(palette);
+  prisonKeyGroup.position.set(0, 0, -9);
+  prisonKeyGroup.visible = false;
+  prisonKeyGroup.userData.prisonKey = true;
+  if (prisonKeyGroup.userData.keyPivot) {
+    animatables.push(prisonKeyGroup.userData.keyPivot as THREE.Object3D);
+  }
+  group.add(prisonKeyGroup);
+
   return {
     group,
     animatables,
@@ -1831,6 +2062,16 @@ export function createDungeonEnvironment(
     crackMaterials,
     crackGeo,
     weaponChest,
+    guardianPos,
+    guardianMesh,
+    guardianAuraMat,
+    prisonPos,
+    prisonGroup,
+    prisonBars,
+    prisonLockMat,
+    captiveMesh,
+    prisonKeyGroup,
+    cameraOccluders,
     disposables,
   };
 }
@@ -1839,6 +2080,7 @@ export function createDungeonEnvironment(
 export function createAcademyHallEnvironment(palette: MaterialPalette): AcademyHallRig {
   const group = new THREE.Group();
   const animatables: THREE.Object3D[] = [];
+  const cameraOccluders: THREE.Object3D[] = [];
   const exitPadPos = new THREE.Vector3(0, 0, 16);
 
   const outerFloor = new THREE.Mesh(
@@ -1906,6 +2148,7 @@ export function createAcademyHallEnvironment(palette: MaterialPalette): AcademyH
     orb.userData.phase = idx * 0.7;
     animatables.push(orb);
     group.add(col, cap, orb);
+    cameraOccluders.push(col, cap);
   });
 
   // Back Royal Wall
@@ -1915,6 +2158,7 @@ export function createAcademyHallEnvironment(palette: MaterialPalette): AcademyH
   );
   backWall.position.set(0, 3.25, -21.5);
   group.add(backWall);
+  cameraOccluders.push(backWall, dais);
 
   // Exit Portal back to Hutan Kata
   const exitGate = new THREE.Group();
@@ -1935,7 +2179,7 @@ export function createAcademyHallEnvironment(palette: MaterialPalette): AcademyH
   exitGate.add(pad, ring);
   group.add(exitGate);
 
-  return { group, animatables, exitPadPos, exitClickable: exitGate };
+  return { group, animatables, exitPadPos, exitClickable: exitGate, cameraOccluders };
 }
 
 // 12. First-Person Hand & Held Item Viewmodel (Minecraft-style bottom-right viewmodel)

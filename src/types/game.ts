@@ -255,6 +255,11 @@ export interface DungeonZoneState {
   monstersTotal: number;
   bossSpawned: boolean;
   bossDefeated: boolean;
+  prisonKeySpawned: boolean;
+  prisonKeyCollected: boolean;
+  prisonUnlocked: boolean;
+  captiveName: string;
+  guardianName: string;
   liberated: boolean;
   isMixedChallenge: boolean;
 }
@@ -269,7 +274,7 @@ export interface ProjectedLabel {
 }
 
 export interface StoryDialogState {
-  kind: 'opening' | 'area_cleared' | 'defeat_exit';
+  kind: 'opening' | 'area_cleared' | 'defeat_exit' | 'dungeon_intro' | 'dungeon_rescue';
   step: number;
   zoneId?: ZoneId;
   speakerName: string;
@@ -301,6 +306,9 @@ export type RadarBlipKind =
   | 'spot_menara'
   | 'spot_gua'
   | 'npc'
+  | 'guardian'
+  | 'key'
+  | 'prison'
   | 'portal'
   | 'monster_quiz'
   | 'monster_brawl'
@@ -372,6 +380,9 @@ export interface RpgHudSnapshot {
   nearbyNpcId: string | null;
   nearbyMonsterId: string | null;
   nearbyDoorIndex: number | null;
+  nearbyDungeonGuardian: boolean;
+  nearPrisonKey: boolean;
+  nearHiddenPrison: boolean;
   nearPortal: boolean;
   nearDungeonExit: boolean;
   portalUnlocked: boolean;
