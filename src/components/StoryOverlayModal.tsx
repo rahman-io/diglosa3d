@@ -30,8 +30,8 @@ export const StoryOverlayModal: React.FC<StoryOverlayModalProps> = ({
   if (!story) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#0f172a]/60 p-4 sm:items-center">
-      <div className="w-full max-w-xl overflow-hidden rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/60 p-2 sm:items-center sm:p-4">
+      <div className="my-auto max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl">
         <div className="flex items-center justify-between border-b-2 border-[#d6b67c] bg-[#f5e3be] px-5 py-3">
           <div className="flex items-center gap-3">
             <div

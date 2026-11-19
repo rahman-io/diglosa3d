@@ -217,8 +217,8 @@ export const IeltsAcademyModal: React.FC<IeltsAcademyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f172a]/80 p-3 sm:p-5">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border-4 border-[#4c1d95] bg-[#faf5ff] text-[#1e1b4b] shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-[#0f172a]/80 p-2 sm:p-5">
+      <div className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border-4 border-[#4c1d95] bg-[#faf5ff] text-[#1e1b4b] shadow-2xl">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#ddd6fe] bg-[#ede9fe] px-5 py-3">
           <div>

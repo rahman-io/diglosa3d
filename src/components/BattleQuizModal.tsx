@@ -526,17 +526,17 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
   const bossDef = battle.isZoneBoss ? BOSSES[battle.zoneId] : null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#0f172a]/75 p-3 sm:p-4">
-      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/75 p-2 sm:p-4">
+      <div className="my-auto max-h-[94dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-2xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl sm:rounded-3xl">
         {/* Top VS Header */}
-        <div className="flex items-center justify-between border-b-2 border-[#d6b67c] bg-[#f5e3be] px-5 py-3">
+        <div className="flex items-center justify-between border-b-2 border-[#d6b67c] bg-[#f5e3be] px-3.5 py-2 sm:px-5 sm:py-3">
           <div>
-            <div className="text-sm font-extrabold">Hoot (Pengelana)</div>
-            <div className="mt-1 flex items-center gap-1">
+            <div className="text-xs font-extrabold sm:text-sm">Hoot (Pengelana)</div>
+            <div className="mt-0.5 flex items-center gap-0.5 sm:mt-1 sm:gap-1">
               {Array.from({ length: playerMaxHp }).map((_, i) => (
                 <Heart
                   key={i}
-                  className={`h-4 w-4 ${
+                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${
                     i < localPlayerHp ? 'fill-rose-500 text-rose-600' : 'fill-slate-300 text-slate-400'
                   }`}
                 />
@@ -545,23 +545,23 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
           </div>
 
           <div className="text-center">
-            <div className="rounded-xl bg-[#b91c1c] px-3 py-1 font-mono-nums text-sm font-black tracking-wider text-white shadow">
+            <div className="rounded-lg bg-[#b91c1c] px-2.5 py-0.5 font-mono-nums text-xs font-black tracking-wider text-white shadow sm:rounded-xl sm:px-3 sm:py-1 sm:text-sm">
               VS
             </div>
             {bossDef && (
-              <div className="mt-1 font-mono-nums text-[10px] font-black text-purple-900">
+              <div className="mt-0.5 font-mono-nums text-[10px] font-black text-purple-900">
                 FASE {bossPhase}/{bossDef.phases}
               </div>
             )}
           </div>
 
           <div className="text-right">
-            <div className="text-sm font-extrabold">{battle.monsterName}</div>
-            <div className="mt-1 flex items-center justify-end gap-0.5">
+            <div className="text-xs font-extrabold sm:text-sm">{battle.monsterName}</div>
+            <div className="mt-0.5 flex items-center justify-end gap-0.5 sm:mt-1">
               {Array.from({ length: monsterMaxHp }).map((_, i) => (
                 <Shield
                   key={i}
-                  className={`h-3.5 w-3.5 ${
+                  className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${
                     i < monsterHp ? 'fill-purple-600 text-purple-800' : 'fill-slate-300 text-slate-400'
                   }`}
                 />
@@ -572,18 +572,18 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
 
         {/* Boss Mechanic & Taunt Banner */}
         {bossDef && (
-          <div className="border-b border-[#d6b67c] bg-purple-950 px-5 py-1.5 text-center text-[11px] font-bold text-amber-200">
+          <div className="border-b border-[#d6b67c] bg-purple-950 px-3.5 py-1 text-center text-[10px] font-bold text-amber-200 sm:px-5 sm:py-1.5 sm:text-[11px]">
             {bossTaunt || bossDef.mechanicDesc}
           </div>
         )}
 
         {/* Visual Arena Strip + Active Relic Buttons */}
-        <div className="relative mx-5 mt-3.5 flex h-24 items-center justify-between overflow-hidden rounded-2xl border-2 border-[#b45309]/50 bg-gradient-to-b from-[#fde68a] via-[#fef3c7] to-[#84cc16] px-6">
-          <div className="flex flex-col items-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#0f172a] bg-emerald-500 text-xl font-black text-white shadow-md">
+        <div className="relative mx-3.5 mt-2 flex h-14 items-center justify-between overflow-hidden rounded-xl border-2 border-[#b45309]/50 bg-gradient-to-b from-[#fde68a] via-[#fef3c7] to-[#84cc16] px-3.5 sm:mx-5 sm:mt-3.5 sm:h-24 sm:rounded-2xl sm:px-6">
+          <div className="flex items-center gap-2 sm:flex-col sm:gap-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#0f172a] bg-emerald-500 text-base font-black text-white shadow-md sm:h-12 sm:w-12 sm:rounded-2xl sm:text-xl">
               🦉
             </div>
-            <span className="mt-1 rounded bg-[#0f172a]/85 px-2 py-0.5 text-[10px] font-bold text-white">
+            <span className="rounded bg-[#0f172a]/85 px-1.5 py-0.5 text-[9px] font-bold text-white sm:mt-1 sm:px-2 sm:text-[10px]">
               {question.category}
             </span>
           </div>
@@ -627,22 +627,22 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
             )}
           </div>
 
-          <div className="flex flex-col items-center">
+          <div className="flex items-center gap-2 sm:flex-col sm:gap-0">
             <div
-              className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#0f172a] text-lg font-black text-white shadow-md ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#0f172a] text-base font-black text-white shadow-md sm:h-12 sm:w-12 sm:rounded-2xl sm:text-lg ${
                 battle.isZoneBoss || battle.isIeltsBoss ? 'bg-purple-700' : 'bg-orange-500'
               }`}
             >
               👾
             </div>
-            <span className="mt-1 rounded bg-[#0f172a]/85 px-2 py-0.5 font-mono-nums text-[10px] font-bold text-amber-300">
+            <span className="rounded bg-[#0f172a]/85 px-1.5 py-0.5 font-mono-nums text-[9px] font-bold text-amber-300 sm:mt-1 sm:px-2 sm:text-[10px]">
               HP {monsterHp}/{monsterMaxHp}
             </span>
           </div>
         </div>
 
         {/* Question Prompt & Audio */}
-        <div className="px-6 pt-3.5">
+        <div className="px-3.5 pt-2 sm:px-6 sm:pt-3.5">
           <div className="flex items-start justify-between gap-2">
             <div>
               {question.isDifficultyFlagged && (
@@ -671,7 +671,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
           )}
 
           {/* Reflex / Pendekar Timer Bar */}
-          <div className="mt-2.5 h-3 w-full overflow-hidden rounded-full border border-[#78350f] bg-[#e7d3ad]">
+          <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full border border-[#78350f] bg-[#e7d3ad] sm:mt-2.5 sm:h-3">
             <div
               className={`h-full transition-all duration-75 ${
                 turnFrozen
@@ -694,22 +694,22 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
 
           {/* Big AMBIL! Reflex Button */}
           {turnPhase === 'grab' ? (
-            <div className="mt-3">
+            <div className="mt-2 sm:mt-3">
               <button
                 type="button"
                 onClick={handleGrab}
-                className="w-full rounded-2xl border-2 border-[#78350f] bg-gradient-to-b from-[#fb923c] to-[#ea580c] py-3 text-base font-black tracking-wide text-white shadow-[0_5px_0_#78350f] transition hover:brightness-105 active:translate-y-1 active:shadow-[0_2px_0_#78350f] sm:text-lg"
+                className="w-full rounded-xl border-2 border-[#78350f] bg-gradient-to-b from-[#fb923c] to-[#ea580c] py-2 text-sm font-black tracking-wide text-white shadow-[0_4px_0_#78350f] transition hover:brightness-105 active:translate-y-1 active:shadow-[0_2px_0_#78350f] sm:rounded-2xl sm:py-3 sm:text-lg"
               >
                 ✋ AMBIL GILIRAN! (Spasi · {grabTimer.toFixed(1)}d)
               </button>
-              <p className="mt-1.5 text-center text-[11px] font-semibold text-[#78350f]">
+              <p className="mt-1 text-center text-[10px] font-semibold text-[#78350f] sm:mt-1.5 sm:text-[11px]">
                 Tekan cepat sebelum monster merebut giliran!
                 {hasSepatu && ' (👟 Sepatu Angin aktif +1 dtk)'}
               </p>
             </div>
           ) : (
             <div
-              className={`mt-3 rounded-xl border px-3 py-2 text-center text-xs font-extrabold ${
+              className={`mt-2 rounded-xl border px-3 py-1.5 text-center text-[11px] font-extrabold sm:mt-3 sm:py-2 sm:text-xs ${
                 turnPhase === 'feedback'
                   ? feedbackGood
                     ? 'border-emerald-500 bg-emerald-100 text-emerald-950'
@@ -724,8 +724,8 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
             </div>
           )}
 
-          {/* 4 Answer Choices */}
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {/* 4 Answer Choices (2 columns even on landscape phones so everything stays compact!) */}
+          <div className="mt-2 grid grid-cols-1 gap-1.5 min-[480px]:grid-cols-2 sm:mt-3 sm:gap-2">
             {question.choices.map((choice, idx) => {
               const isPicked = selectedIdx === idx;
               const isCorrectChoice = idx === question.correctIndex;
@@ -755,7 +755,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
                   type="button"
                   disabled={turnPhase !== 'answer' || isEliminated || isLocked}
                   onClick={() => handlePickChoice(idx)}
-                  className={`flex items-center gap-2.5 rounded-xl border-2 px-3 py-2.5 text-left text-sm font-bold transition ${cardStyle}`}
+                  className={`flex items-center gap-2 rounded-xl border-2 px-2.5 py-2 text-left text-xs font-bold transition sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-sm ${cardStyle}`}
                 >
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#e7d3ad] font-mono-nums text-xs font-extrabold text-[#5c340f]">
                     {isLocked ? <Lock className="h-3.5 w-3.5" /> : idx + 1}
@@ -769,7 +769,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
           </div>
 
           {/* Bottom Bar */}
-          <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 pb-4">
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pb-2.5 sm:mt-3.5 sm:pb-4">
             <div className="flex items-center gap-2 text-[11px] font-bold text-[#78350f]">
               {hasPedang && (
                 <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-amber-900">

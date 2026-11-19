@@ -75,8 +75,8 @@ export const NpcDialogueModal: React.FC<NpcDialogueModalProps> = ({
   const portalBlocked = storyLocked && crowns < 6;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#0f172a]/70 p-4">
-      <div className="w-full max-w-xl overflow-hidden rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/70 p-2 sm:p-4">
+      <div className="my-auto max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-[#d6b67c] bg-[#f5e3be] px-5 py-3.5">
           <div className="flex items-center gap-3">

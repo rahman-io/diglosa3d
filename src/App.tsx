@@ -22,6 +22,7 @@ import {
   syncRunToCloud,
 } from './services/leaderboardService';
 import { RpgWorldEngine } from './three/RpgWorldEngine';
+import { isTouchViewport, requestAppFullscreen } from './utils/fullscreen';
 import {
   BattleContext,
   CaveSealContext,
@@ -355,6 +356,7 @@ function DiglosaRpgApp() {
   }, []);
 
   const handleContinue = useCallback(() => {
+    if (isTouchViewport()) void requestAppFullscreen();
     setActiveBattle(null);
     setActiveLearning(null);
     setActiveAcademySkill(null);
@@ -367,6 +369,7 @@ function DiglosaRpgApp() {
   }, []);
 
   const handleStartNew = useCallback(() => {
+    if (isTouchViewport()) void requestAppFullscreen();
     setActiveBattle(null);
     setActiveLearning(null);
     setActiveAcademySkill(null);
@@ -413,7 +416,7 @@ function DiglosaRpgApp() {
   }, [hud]);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
+    <div className="relative h-[100dvh] w-[100dvw] overflow-hidden">
       {/* Isolated 100% 3D World Viewport */}
       <div ref={mountRef} className="absolute inset-0 h-full w-full" />
 
@@ -422,7 +425,10 @@ function DiglosaRpgApp() {
           hasSavedGame={hud.hasSavedGame}
           onContinue={handleContinue}
           onStartNew={handleStartNew}
-          onQuickLearn={(mode) => engineRef.current?.startQuickLearning(mode)}
+          onQuickLearn={(mode) => {
+            if (isTouchViewport()) void requestAppFullscreen();
+            engineRef.current?.startQuickLearning(mode);
+          }}
           onOpenLeaderboard={() => setLeaderboardOpen(true)}
           onOpenGuide={() => setSideTab('guide')}
           bestLocalScore={bestLocalScore}

@@ -31,8 +31,8 @@ export const CaveCraftingModal: React.FC<CaveCraftingModalProps> = ({
       : 'Beliung Batu (1× Dasar)';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f172a]/75 p-4">
-      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border-4 border-[#78350f] bg-[#fef3c7] shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/75 p-2 sm:p-4">
+      <div className="my-auto max-h-[92dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-4 border-[#78350f] bg-[#fef3c7] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b-4 border-[#92400e] bg-[#5c340f] px-5 py-3.5 text-white">
           <div className="flex items-center gap-2.5">

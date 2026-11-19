@@ -1,0 +1,11 @@
+{
+  "name": "Diglosa 3D",
+  "short_name": "Diglosa 3D",
+  "description": "Petualangan RPG 3D Bahasa Inggris A1 hingga IELTS",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a"
+}

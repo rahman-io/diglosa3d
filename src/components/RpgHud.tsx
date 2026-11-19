@@ -15,8 +15,10 @@ import {
   KeyRound,
   Lock,
   Map as MapIcon,
+  Maximize2,
   Menu,
   MessageCircle,
+  Minimize2,
   Pause,
   Pickaxe,
   ScrollText,
@@ -37,6 +39,7 @@ import {
   ZONE_DOORS,
 } from '../data/diglosaCatalog';
 import { CameraMode, RpgHudSnapshot } from '../types/game';
+import { isFullscreenActive, toggleAppFullscreen } from '../utils/fullscreen';
 import { RadarMinimap, StarterWeaponPixelIcon } from './RadarMinimap';
 
 const CAMERA_SHORT_LABELS: Record<CameraMode, string> = {
@@ -93,6 +96,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
   const [touchUsed, setTouchUsed] = useState(false);
   const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isFs, setIsFs] = useState(false);
   const [stickKnob, setStickKnob] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [floatingOrigin, setFloatingOrigin] = useState<{ x: number; y: number } | null>(null);
   const stickOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -113,10 +117,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
     const checkWidth = () => setIsSmallViewport(window.innerWidth < 640);
     checkWidth();
     window.addEventListener('resize', checkWidth);
+    const onFsChange = () => setIsFs(isFullscreenActive());
+    onFsChange();
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
     return () => {
       mq.removeEventListener?.('change', handler);
       window.removeEventListener('pointerdown', onGlobalPointer);
       window.removeEventListener('resize', checkWidth);
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
     };
   }, []);
 
@@ -353,6 +363,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           >
             <Camera className="h-3.5 w-3.5 text-cyan-300" />
             <span>{CAMERA_SHORT_LABELS[hud.cameraMode]}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void toggleAppFullscreen()}
+            title={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
+            aria-label={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-slate-950/55 text-cyan-200 shadow backdrop-blur-[2px] hover:bg-slate-900/80"
+          >
+            {isFs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
 
           <button

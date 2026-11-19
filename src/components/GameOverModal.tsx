@@ -24,8 +24,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   const isGameOver = hud.phase === 'gameover';
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#0f172a]/70 p-4">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] p-6 text-[#3b2008] shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/70 p-2 sm:p-4">
+      <div className="my-auto max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] p-5 text-[#3b2008] shadow-2xl sm:p-6">
         <div className="text-center">
           <span
             className={`inline-block rounded-full px-3 py-1 text-xs font-extrabold uppercase tracking-wider ${

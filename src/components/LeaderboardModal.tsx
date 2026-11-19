@@ -46,8 +46,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f172a]/70 p-4">
-      <div className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/15 bg-[#0f172a] text-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/70 p-2 sm:p-4">
+      <div className="my-auto max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border border-white/15 bg-[#0f172a] text-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 bg-[#1e293b] px-6 py-4">
           <div className="flex items-center gap-3">
