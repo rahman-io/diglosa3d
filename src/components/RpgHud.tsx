@@ -4,23 +4,17 @@ import {
   BookOpen,
   Camera,
   Crown,
-  DoorOpen,
   Gem,
-  Hammer,
   Heart,
   HelpCircle,
-  KeyRound,
   Lock,
   Map as MapIcon,
   Maximize2,
   Menu,
-  MessageCircle,
   Minimize2,
   Pause,
   ScrollText,
   Settings,
-  Sparkles,
-  Swords,
   Trophy,
   Volume2,
   VolumeX,
@@ -707,16 +701,22 @@ export const RpgHud: React.FC<RpgHudProps> = ({
         </div>
       )}
 
-      {/* CONTEXTUAL ACTION PILLS (to the left of Mobile Legends Jump button, like Recall/Regen bar) */}
-      <div className="pointer-events-auto fixed bottom-[18px] right-[168px] z-20 flex items-center gap-2 sm:bottom-[22px] sm:right-[194px]">
+      {/* CONTEXTUAL ACTION MEDALLIONS (Mobile Legends style icon row left of Jump button) */}
+      <div className="pointer-events-auto fixed bottom-[16px] right-[168px] z-20 flex items-center gap-2.5 sm:bottom-[24px] sm:right-[198px] sm:gap-3">
         {nearbyOverworldNpc && (
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/80 bg-slate-950/80 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+            title={`Bicara: ${nearbyOverworldNpc.name}`}
+            aria-label={`Bicara dengan ${nearbyOverworldNpc.name}`}
+            className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
           >
-            <MessageCircle className="h-4 w-4" />
-            <span>{nearbyOverworldNpc.name}</span>
+            <img
+              src="./assets/ui/btn_talk.png"
+              alt={nearbyOverworldNpc.name}
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(245,158,11,0.55)]"
+              draggable={false}
+            />
           </button>
         )}
 
@@ -724,10 +724,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300/80 bg-slate-950/80 px-3.5 text-xs font-black text-purple-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+            title={`Bicara: ${nearbyAcademyNpc.name}`}
+            aria-label={`Bicara dengan ${nearbyAcademyNpc.name}`}
+            className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
           >
-            <MessageCircle className="h-4 w-4" />
-            <span>{nearbyAcademyNpc.name}</span>
+            <img
+              src="./assets/ui/btn_talk.png"
+              alt={nearbyAcademyNpc.name}
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(168,85,247,0.55)]"
+              draggable={false}
+            />
           </button>
         )}
 
@@ -735,10 +741,21 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-emerald-300/80 bg-emerald-950/85 px-3.5 text-xs font-black text-emerald-100 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+            title={`Buka ${nearbyDoor.name}`}
+            aria-label={`Buka ${nearbyDoor.name}`}
+            className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
           >
-            <DoorOpen className="h-4 w-4" />
-            <span>Buka {nearbyDoor.name}</span>
+            <img
+              src="./assets/ui/btn_door.png"
+              alt={`Buka ${nearbyDoor.name}`}
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(16,185,129,0.6)]"
+              draggable={false}
+            />
+            {hud.nearbyDoorIndex !== null && (
+              <span className="pointer-events-none absolute -bottom-0.5 rounded-full border border-emerald-300/70 bg-slate-950/95 px-1.5 font-mono-nums text-[9px] font-black leading-tight text-emerald-200 shadow">
+                {hud.nearbyDoorIndex + 1}
+              </span>
+            )}
           </button>
         )}
 
@@ -746,10 +763,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300/85 bg-purple-950/85 px-4 text-xs font-black text-white shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+            title="Masuk Istana IELTS"
+            aria-label="Masuk Istana IELTS"
+            className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
           >
-            <Swords className="h-4 w-4" />
-            <span>Istana IELTS</span>
+            <img
+              src="./assets/ui/btn_portal.png"
+              alt="Istana IELTS"
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(168,85,247,0.65)]"
+              draggable={false}
+            />
           </button>
         )}
 
@@ -757,10 +780,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onExitDungeon}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-cyan-300/80 bg-cyan-950/85 px-4 text-xs font-black text-cyan-100 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+            title="Keluar ke Dunia Utama"
+            aria-label="Keluar"
+            className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
           >
-            <DoorOpen className="h-4 w-4" />
-            <span>Keluar</span>
+            <img
+              src="./assets/ui/btn_exit.png"
+              alt="Keluar"
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(34,211,238,0.6)]"
+              draggable={false}
+            />
           </button>
         )}
 
@@ -771,10 +800,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onOpenCrafting}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/80 bg-slate-950/85 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+              title="Meja Craft"
+              aria-label="Craft"
+              className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
             >
-              <Hammer className="h-4 w-4" />
-              <span>Craft</span>
+              <img
+                src="./assets/ui/btn_craft.png"
+                alt="Craft"
+                className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(249,115,22,0.6)]"
+                draggable={false}
+              />
             </button>
           )}
 
@@ -784,10 +819,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300 bg-amber-950/90 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+              title="Ambil Kunci Penjara"
+              aria-label="Ambil Kunci"
+              className="relative flex h-[54px] w-[54px] animate-pulse items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
             >
-              <KeyRound className="h-4 w-4" />
-              <span>Ambil Kunci</span>
+              <img
+                src="./assets/ui/btn_key.png"
+                alt="Ambil Kunci"
+                className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(250,204,21,0.65)]"
+                draggable={false}
+              />
             </button>
           )}
 
@@ -798,22 +839,35 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className={`flex h-11 items-center gap-1.5 rounded-full border-2 px-3.5 text-xs font-black text-white shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12 ${
+              title={
                 hud.dungeonState.prisonKeyCollected
-                  ? 'border-emerald-300 bg-emerald-900/90'
-                  : 'border-rose-300 bg-rose-950/90'
+                  ? `Bebaskan ${hud.dungeonState.captiveName}`
+                  : 'Penjara Terkunci (Butuh Kunci)'
+              }
+              aria-label={
+                hud.dungeonState.prisonKeyCollected
+                  ? `Bebaskan ${hud.dungeonState.captiveName}`
+                  : 'Terkunci'
+              }
+              className={`relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px] ${
+                hud.dungeonState.prisonKeyCollected ? '' : 'opacity-80 grayscale-[35%]'
               }`}
             >
-              {hud.dungeonState.prisonKeyCollected ? (
-                <KeyRound className="h-4 w-4" />
-              ) : (
-                <Lock className="h-4 w-4" />
+              <img
+                src="./assets/ui/btn_unlock.png"
+                alt={hud.dungeonState.prisonKeyCollected ? 'Bebaskan' : 'Terkunci'}
+                className={`pointer-events-none h-full w-full select-none object-contain ${
+                  hud.dungeonState.prisonKeyCollected
+                    ? 'drop-shadow-[0_5px_14px_rgba(16,185,129,0.65)]'
+                    : 'drop-shadow-[0_5px_12px_rgba(244,63,94,0.55)]'
+                }`}
+                draggable={false}
+              />
+              {!hud.dungeonState.prisonKeyCollected && (
+                <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-rose-300 bg-rose-950/95 text-rose-200 shadow">
+                  <Lock className="h-3 w-3" />
+                </span>
               )}
-              <span>
-                {hud.dungeonState.prisonKeyCollected
-                  ? `Bebaskan ${hud.dungeonState.captiveName}`
-                  : 'Terkunci'}
-              </span>
             </button>
           )}
 
@@ -826,10 +880,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/80 bg-slate-950/85 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+              title={`Bicara: ${hud.dungeonState?.guardianName || 'Penjaga'}`}
+              aria-label={hud.dungeonState?.guardianName || 'Penjaga'}
+              className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
             >
-              <MessageCircle className="h-4 w-4" />
-              <span>{hud.dungeonState?.guardianName || 'Penjaga'}</span>
+              <img
+                src="./assets/ui/btn_talk.png"
+                alt={hud.dungeonState?.guardianName || 'Penjaga'}
+                className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(245,158,11,0.55)]"
+                draggable={false}
+              />
             </button>
           )}
 
@@ -841,10 +901,16 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300 bg-purple-950/90 px-3.5 text-xs font-black text-purple-100 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
+              title="Hancurkan Segel Kata"
+              aria-label="Segel Kata"
+              className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[62px] sm:w-[62px]"
             >
-              <Sparkles className="h-4 w-4" />
-              <span>Segel</span>
+              <img
+                src="./assets/ui/btn_seal.png"
+                alt="Segel Kata"
+                className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(168,85,247,0.65)]"
+                draggable={false}
+              />
             </button>
           )}
       </div>
