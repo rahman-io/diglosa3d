@@ -1,13 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ArrowUp,
   Backpack,
   BookOpen,
   Camera,
-  Crosshair,
   Crown,
   DoorOpen,
-  Flame,
   Gem,
   Hammer,
   Heart,
@@ -20,10 +17,8 @@ import {
   MessageCircle,
   Minimize2,
   Pause,
-  Pickaxe,
   ScrollText,
   Settings,
-  Shield,
   Sparkles,
   Swords,
   Trophy,
@@ -179,6 +174,30 @@ export const RpgHud: React.FC<RpgHudProps> = ({
     hud.ownedWeapons.includes(wId),
   );
 
+  const activeItemIconSrc =
+    hud.activeHotbarSlot === 8
+      ? './assets/ui/icon_pickaxe.png'
+      : hud.activeHotbarSlot === 9
+      ? './assets/ui/icon_torch.png'
+      : hud.activeHotbarSlot === 10
+      ? './assets/ui/icon_shield_block.png'
+      : hud.activeHotbarSlot === 11
+      ? './assets/ui/icon_tnt.png'
+      : './assets/ui/icon_slingshot.png';
+
+  const activeSlotBadgeText =
+    hud.activeHotbarSlot === 8
+      ? `T${hud.pickaxeTier}`
+      : hud.activeHotbarSlot === 9
+      ? String(hud.caveTorchesLeft)
+      : hud.activeHotbarSlot === 10
+      ? String(hud.caveShieldBlocksLeft)
+      : hud.activeHotbarSlot === 11
+      ? String(hud.caveTntLeft)
+      : hud.ownedWeapons.length > 0
+      ? String(activeAmmo)
+      : null;
+
   const updateJoystickFromPointer = (clientX: number, clientY: number) => {
     const origin = stickOriginRef.current;
     if (!origin) return;
@@ -327,7 +346,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             </div>
           </div>
 
-          {/* GTA-Style Active Weapon Box (tap to open Tas) */}
+          {/* GTA/MOBA Active Weapon & Tool Box (tap to open Tas) */}
           <button
             type="button"
             onClick={onOpenBag}
@@ -336,20 +355,20 @@ export const RpgHud: React.FC<RpgHudProps> = ({
                 ? `${activeWeaponDef.name} (${activeAmmo}) — Buka Tas`
                 : 'Buka Tas & Senjata'
             }
-            className="relative flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white/40 bg-slate-950/60 text-white shadow-lg backdrop-blur-[2px] transition hover:border-amber-300"
+            className="relative flex h-11 w-11 items-center justify-center rounded-xl border-2 border-amber-300/50 bg-slate-950/65 p-1 text-white shadow-lg backdrop-blur-[2px] transition hover:border-amber-300"
           >
-            {hud.ownedWeapons.length > 0 ? (
-              <>
-                <span
-                  className="h-5 w-5 rounded border border-white/50 shadow-inner"
-                  style={{ backgroundColor: activeWeaponDef.color }}
-                />
-                <span className="absolute -bottom-1 right-0.5 rounded bg-slate-950/90 px-1 font-mono-nums text-[9px] font-black text-amber-300">
-                  {activeAmmo}
-                </span>
-              </>
-            ) : (
-              <Crosshair className="h-5 w-5 text-slate-300" />
+            <img
+              src={activeItemIconSrc}
+              alt="Item Aktif"
+              className={`h-8 w-8 object-contain drop-shadow ${
+                hud.ownedWeapons.length === 0 && hud.activeHotbarSlot < 8 ? 'opacity-45 grayscale' : ''
+              }`}
+              draggable={false}
+            />
+            {activeSlotBadgeText !== null && (
+              <span className="absolute -bottom-1 right-0.5 rounded bg-slate-950/95 px-1 font-mono-nums text-[9px] font-black text-amber-300 ring-1 ring-amber-400/30">
+                {activeSlotBadgeText}
+              </span>
             )}
           </button>
         </div>
@@ -529,9 +548,9 @@ export const RpgHud: React.FC<RpgHudProps> = ({
         </>
       )}
 
-      {/* RIGHT-EDGE VERTICAL PILL STACK (directly above the Fire button, toggled open/closed) */}
+      {/* RIGHT-EDGE VERTICAL PILL STACK (directly above Weapon Switcher medallion) */}
       {hotbarOpen && (
-        <div className="pointer-events-auto fixed bottom-[4.9rem] right-3 z-30 flex max-h-[calc(100dvh-11.2rem)] flex-col items-end gap-1.5 overflow-y-auto overscroll-contain touch-pan-y py-1 pr-0.5 sm:bottom-[5.4rem] sm:right-5">
+        <div className="pointer-events-auto fixed bottom-[154px] right-3 z-30 flex max-h-[calc(100dvh-13.2rem)] flex-col items-end gap-1.5 overflow-y-auto overscroll-contain touch-pan-y py-1 pr-0.5 sm:bottom-[178px] sm:right-5">
           {ownedWeaponIndices.length > 0 ? (
             ownedWeaponIndices.map(({ wId, idx }) => {
               const w = WEAPONS[wId];
@@ -546,20 +565,27 @@ export const RpgHud: React.FC<RpgHudProps> = ({
                     setHotbarOpen(false);
                   }}
                   title={`${idx + 1}. ${w.name} (${ammo})`}
-                  className={`flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-[11px] font-bold shadow-lg backdrop-blur-md transition ${
+                  className={`flex h-10 shrink-0 items-center gap-2 rounded-full border pl-3 pr-2 text-xs font-bold shadow-xl backdrop-blur-md transition ${
                     isSelected
                       ? 'border-amber-300 bg-amber-950/90 text-amber-100 ring-1 ring-amber-300'
-                      : 'border-white/20 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
+                      : 'border-white/25 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
                   }`}
                 >
                   <span>{w.name}</span>
-                  <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[9px] font-black text-amber-200">
+                  <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[10px] font-black text-amber-200">
                     {ammo}
                   </span>
                   <span
-                    className="h-3.5 w-3.5 shrink-0 rounded-sm border border-white/50 shadow-inner"
-                    style={{ backgroundColor: w.color }}
-                  />
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/30 bg-slate-900/90 p-0.5"
+                    style={{ boxShadow: `0 0 8px ${w.color}66` }}
+                  >
+                    <img
+                      src="./assets/ui/icon_slingshot.png"
+                      alt={w.name}
+                      className="h-6 w-6 object-contain"
+                      draggable={false}
+                    />
+                  </span>
                 </button>
               );
             })
@@ -567,10 +593,15 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={() => setHotbarOpen(false)}
-              className="flex h-8 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-slate-950/80 px-3 text-[11px] font-bold text-slate-300 shadow-lg backdrop-blur-md"
+              className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-white/20 bg-slate-950/85 pl-3 pr-2 text-xs font-bold text-slate-300 shadow-xl backdrop-blur-md"
             >
               <span>Senjata (Belum Ada)</span>
-              <Crosshair className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <img
+                src="./assets/ui/icon_slingshot.png"
+                alt="Senjata"
+                className="h-6 w-6 object-contain opacity-45 grayscale"
+                draggable={false}
+              />
             </button>
           )}
 
@@ -581,14 +612,22 @@ export const RpgHud: React.FC<RpgHudProps> = ({
               setHotbarOpen(false);
             }}
             title={`9. Beliung Tier ${hud.pickaxeTier}`}
-            className={`flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-[11px] font-bold shadow-lg backdrop-blur-md transition ${
+            className={`flex h-10 shrink-0 items-center gap-2 rounded-full border pl-3 pr-2 text-xs font-bold shadow-xl backdrop-blur-md transition ${
               hud.activeHotbarSlot === 8
-                ? 'border-amber-300 bg-amber-950/90 text-amber-100 ring-1 ring-amber-300'
-                : 'border-white/20 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
+                ? 'border-cyan-300 bg-cyan-950/90 text-cyan-100 ring-1 ring-cyan-300'
+                : 'border-white/25 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
             }`}
           >
             <span>Beliung</span>
-            <Pickaxe className="h-3.5 w-3.5 shrink-0 text-slate-100" />
+            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[10px] font-black text-cyan-200">
+              T{hud.pickaxeTier}
+            </span>
+            <img
+              src="./assets/ui/icon_pickaxe.png"
+              alt="Beliung"
+              className="h-7 w-7 shrink-0 object-contain drop-shadow"
+              draggable={false}
+            />
           </button>
 
           <button
@@ -598,17 +637,22 @@ export const RpgHud: React.FC<RpgHudProps> = ({
               setHotbarOpen(false);
             }}
             title={`0. Obor (${hud.caveTorchesLeft})`}
-            className={`flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-[11px] font-bold shadow-lg backdrop-blur-md transition ${
+            className={`flex h-10 shrink-0 items-center gap-2 rounded-full border pl-3 pr-2 text-xs font-bold shadow-xl backdrop-blur-md transition ${
               hud.activeHotbarSlot === 9
                 ? 'border-amber-300 bg-amber-950/90 text-amber-100 ring-1 ring-amber-300'
-                : 'border-white/20 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
+                : 'border-white/25 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
             }`}
           >
             <span>Obor</span>
-            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[9px] font-black text-amber-200">
+            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[10px] font-black text-amber-200">
               {hud.caveTorchesLeft}
             </span>
-            <Flame className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+            <img
+              src="./assets/ui/icon_torch.png"
+              alt="Obor"
+              className="h-7 w-7 shrink-0 object-contain drop-shadow"
+              draggable={false}
+            />
           </button>
 
           <button
@@ -618,17 +662,22 @@ export const RpgHud: React.FC<RpgHudProps> = ({
               setHotbarOpen(false);
             }}
             title={`B. Blok Pelindung (${hud.caveShieldBlocksLeft})`}
-            className={`flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-[11px] font-bold shadow-lg backdrop-blur-md transition ${
+            className={`flex h-10 shrink-0 items-center gap-2 rounded-full border pl-3 pr-2 text-xs font-bold shadow-xl backdrop-blur-md transition ${
               hud.activeHotbarSlot === 10
                 ? 'border-cyan-300 bg-cyan-950/90 text-cyan-100 ring-1 ring-cyan-300'
-                : 'border-white/20 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
+                : 'border-white/25 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
             }`}
           >
             <span>Blok Pelindung</span>
-            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[9px] font-black text-cyan-200">
+            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[10px] font-black text-cyan-200">
               {hud.caveShieldBlocksLeft}
             </span>
-            <Shield className="h-3.5 w-3.5 shrink-0 text-sky-300" />
+            <img
+              src="./assets/ui/icon_shield_block.png"
+              alt="Blok Pelindung"
+              className="h-7 w-7 shrink-0 object-contain drop-shadow"
+              draggable={false}
+            />
           </button>
 
           <button
@@ -638,28 +687,33 @@ export const RpgHud: React.FC<RpgHudProps> = ({
               setHotbarOpen(false);
             }}
             title={`T. TNT Tambang (${hud.caveTntLeft})`}
-            className={`flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-[11px] font-bold shadow-lg backdrop-blur-md transition ${
+            className={`flex h-10 shrink-0 items-center gap-2 rounded-full border pl-3 pr-2 text-xs font-bold shadow-xl backdrop-blur-md transition ${
               hud.activeHotbarSlot === 11
                 ? 'border-rose-300 bg-rose-950/90 text-rose-100 ring-1 ring-rose-300'
-                : 'border-white/20 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
+                : 'border-white/25 bg-slate-950/85 text-slate-100 hover:bg-slate-900'
             }`}
           >
             <span>TNT</span>
-            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[9px] font-black text-rose-200">
+            <span className="rounded-full bg-white/15 px-1.5 font-mono-nums text-[10px] font-black text-rose-200">
               {hud.caveTntLeft}
             </span>
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+            <img
+              src="./assets/ui/icon_tnt.png"
+              alt="TNT"
+              className="h-7 w-7 shrink-0 object-contain drop-shadow"
+              draggable={false}
+            />
           </button>
         </div>
       )}
 
-      {/* BOTTOM-RIGHT: Ergonomic 3-Button Thumb Cluster (Hotbar Toggle + Jump + Fire) */}
-      <div className="pointer-events-auto fixed bottom-3 right-3 z-20 flex items-end gap-2 sm:bottom-5 sm:right-5 sm:gap-2.5">
+      {/* CONTEXTUAL ACTION PILLS (to the left of Mobile Legends Jump button, like Recall/Regen bar) */}
+      <div className="pointer-events-auto fixed bottom-[18px] right-[168px] z-20 flex items-center gap-2 sm:bottom-[22px] sm:right-[194px]">
         {nearbyOverworldNpc && (
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/70 bg-slate-950/75 px-3 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/80 bg-slate-950/80 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
           >
             <MessageCircle className="h-4 w-4" />
             <span>{nearbyOverworldNpc.name}</span>
@@ -670,7 +724,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300/70 bg-slate-950/75 px-3 text-xs font-black text-purple-200 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300/80 bg-slate-950/80 px-3.5 text-xs font-black text-purple-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
           >
             <MessageCircle className="h-4 w-4" />
             <span>{nearbyAcademyNpc.name}</span>
@@ -681,7 +735,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-emerald-300/70 bg-emerald-950/80 px-3 text-xs font-black text-emerald-100 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-emerald-300/80 bg-emerald-950/85 px-3.5 text-xs font-black text-emerald-100 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
           >
             <DoorOpen className="h-4 w-4" />
             <span>Buka {nearbyDoor.name}</span>
@@ -692,7 +746,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onPrimaryAction}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300/75 bg-purple-950/80 px-3.5 text-xs font-black text-white shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-4"
+            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300/85 bg-purple-950/85 px-4 text-xs font-black text-white shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
           >
             <Swords className="h-4 w-4" />
             <span>Istana IELTS</span>
@@ -703,7 +757,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           <button
             type="button"
             onClick={onExitDungeon}
-            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-cyan-300/70 bg-cyan-950/80 px-3.5 text-xs font-black text-cyan-100 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-4"
+            className="flex h-11 items-center gap-1.5 rounded-full border-2 border-cyan-300/80 bg-cyan-950/85 px-4 text-xs font-black text-cyan-100 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
           >
             <DoorOpen className="h-4 w-4" />
             <span>Keluar</span>
@@ -717,7 +771,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onOpenCrafting}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/70 bg-slate-950/80 px-3 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/80 bg-slate-950/85 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
             >
               <Hammer className="h-4 w-4" />
               <span>Craft</span>
@@ -730,7 +784,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300 bg-amber-950/85 px-3 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300 bg-amber-950/90 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
             >
               <KeyRound className="h-4 w-4" />
               <span>Ambil Kunci</span>
@@ -744,10 +798,10 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className={`flex h-11 items-center gap-1.5 rounded-full border-2 px-3 text-xs font-black text-white shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5 ${
+              className={`flex h-11 items-center gap-1.5 rounded-full border-2 px-3.5 text-xs font-black text-white shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12 ${
                 hud.dungeonState.prisonKeyCollected
-                  ? 'border-emerald-300 bg-emerald-900/85'
-                  : 'border-rose-300 bg-rose-950/85'
+                  ? 'border-emerald-300 bg-emerald-900/90'
+                  : 'border-rose-300 bg-rose-950/90'
               }`}
             >
               {hud.dungeonState.prisonKeyCollected ? (
@@ -772,7 +826,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/70 bg-slate-950/80 px-3 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-amber-300/80 bg-slate-950/85 px-3.5 text-xs font-black text-amber-200 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
             >
               <MessageCircle className="h-4 w-4" />
               <span>{hud.dungeonState?.guardianName || 'Penjaga'}</span>
@@ -787,14 +841,17 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300 bg-purple-950/85 px-3 text-xs font-black text-purple-100 shadow-xl backdrop-blur-sm transition hover:scale-105 sm:h-12 sm:px-3.5"
+              className="flex h-11 items-center gap-1.5 rounded-full border-2 border-purple-300 bg-purple-950/90 px-3.5 text-xs font-black text-purple-100 shadow-xl backdrop-blur-sm transition hover:scale-105 active:scale-95 sm:h-12"
             >
               <Sparkles className="h-4 w-4" />
               <span>Segel</span>
             </button>
           )}
+      </div>
 
-        {/* Button 1: Toggle Right-Edge Vertical Weapon & Tool List */}
+      {/* BOTTOM-RIGHT: Mobile Legends Style Radial 3-Medallion Thumb Cluster */}
+      <div className="pointer-events-none fixed bottom-3 right-3 z-20 h-[144px] w-[156px] sm:bottom-5 sm:right-5 sm:h-[168px] sm:w-[180px]">
+        {/* Button 1 (Arc Top-Right): Weapon & Tool Switcher Medallion */}
         <button
           type="button"
           onClick={() => {
@@ -803,81 +860,76 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           }}
           title={hotbarOpen ? 'Tutup Deretan Senjata & Alat' : 'Pilih Senjata & Alat'}
           aria-label={hotbarOpen ? 'Tutup Deretan Senjata & Alat' : 'Pilih Senjata & Alat'}
-          className={`relative flex h-11 w-11 flex-col items-center justify-center rounded-full border-2 shadow-xl backdrop-blur-[2px] transition hover:scale-105 active:scale-95 sm:h-12 sm:w-12 ${
-            hotbarOpen
-              ? 'border-amber-300 bg-amber-500/25 text-amber-200'
-              : 'border-amber-300/65 bg-slate-950/55 text-amber-200'
+          className={`pointer-events-auto absolute bottom-[84px] right-[10px] flex h-[56px] w-[56px] items-center justify-center rounded-full transition-transform active:scale-90 sm:bottom-[98px] sm:right-[12px] sm:h-[64px] sm:w-[64px] ${
+            hotbarOpen ? 'scale-105 ring-2 ring-amber-300' : 'hover:scale-105'
           }`}
         >
+          <img
+            src="./assets/ui/btn_weapons.png"
+            alt="Senjata & Alat"
+            className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(245,158,11,0.5)]"
+            draggable={false}
+          />
           {hotbarOpen ? (
-            <X className="h-5 w-5" />
-          ) : hud.activeHotbarSlot === 8 ? (
-            <Pickaxe className="h-4 w-4 text-slate-100" />
-          ) : hud.activeHotbarSlot === 9 ? (
-            <>
-              <Flame className="h-4 w-4 text-amber-300" />
-              <span className="font-mono-nums text-[8px] font-black leading-none text-amber-200">
-                {hud.caveTorchesLeft}
-              </span>
-            </>
-          ) : hud.activeHotbarSlot === 10 ? (
-            <>
-              <Shield className="h-4 w-4 text-sky-300" />
-              <span className="font-mono-nums text-[8px] font-black leading-none text-cyan-200">
-                {hud.caveShieldBlocksLeft}
-              </span>
-            </>
-          ) : hud.activeHotbarSlot === 11 ? (
-            <>
-              <Sparkles className="h-4 w-4 text-rose-400" />
-              <span className="font-mono-nums text-[8px] font-black leading-none text-rose-200">
-                {hud.caveTntLeft}
-              </span>
-            </>
-          ) : hud.ownedWeapons.length > 0 ? (
-            <>
-              <span
-                className="h-3.5 w-3.5 rounded-sm border border-white/60 shadow-inner"
-                style={{ backgroundColor: activeWeaponDef.color }}
-              />
-              <span className="mt-0.5 font-mono-nums text-[8px] font-black leading-none text-amber-200">
-                {activeAmmo}
-              </span>
-            </>
+            <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-slate-950/95 text-amber-200 shadow">
+              <X className="h-3 w-3" />
+            </span>
           ) : (
-            <Backpack className="h-4 w-4 text-amber-200" />
+            <span className="absolute -bottom-1 -left-1 flex h-6 w-6 items-center justify-center rounded-full border border-amber-300/70 bg-slate-950/90 p-0.5 shadow-md sm:h-7 sm:w-7">
+              <img
+                src={activeItemIconSrc}
+                alt="Aktif"
+                className="pointer-events-none h-full w-full object-contain"
+                draggable={false}
+              />
+            </span>
           )}
         </button>
 
-        {/* Button 2: Jump */}
+        {/* Button 2 (Arc Left): Winged-Boot Jump Medallion */}
         <button
           type="button"
           onClick={onJump}
           title="Lompat (J / Shift)"
           aria-label="Lompat"
-          className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white/55 bg-slate-950/50 text-white shadow-xl backdrop-blur-[2px] transition hover:scale-105 active:scale-95 sm:h-12 sm:w-12"
+          className="pointer-events-auto absolute bottom-[6px] right-[88px] flex h-[58px] w-[58px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:bottom-[8px] sm:right-[102px] sm:h-[66px] sm:w-[66px]"
         >
-          <ArrowUp className="h-5 w-5" />
+          <img
+            src="./assets/ui/btn_jump.png"
+            alt="Lompat"
+            className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(16,185,129,0.5)]"
+            draggable={false}
+          />
         </button>
 
-        {/* Button 3: Fire / Action */}
+        {/* Button 3 (Primary Thumb Anchor): Large Attack / Active Tool Medallion */}
         <button
           type="button"
           onClick={onFireWeapon}
           title="Aksi / Tembak (Spasi)"
           aria-label="Tembak"
-          className="flex h-13 w-13 flex-col items-center justify-center rounded-full border-2 border-cyan-300/80 bg-slate-950/60 text-cyan-200 shadow-xl backdrop-blur-[2px] transition hover:scale-105 active:scale-95 sm:h-14 sm:w-14"
+          className="pointer-events-auto absolute bottom-0 right-0 flex h-[78px] w-[78px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[90px] sm:w-[90px]"
         >
-          {hud.activeHotbarSlot === 8 ? (
-            <Pickaxe className="h-5 w-5" />
-          ) : hud.activeHotbarSlot === 9 ? (
-            <Flame className="h-5 w-5 text-amber-300" />
-          ) : hud.activeHotbarSlot === 10 ? (
-            <Shield className="h-5 w-5 text-sky-300" />
-          ) : hud.activeHotbarSlot === 11 ? (
-            <Sparkles className="h-5 w-5 text-rose-400" />
-          ) : (
-            <Crosshair className="h-5 w-5" />
+          <img
+            src="./assets/ui/btn_attack.png"
+            alt="Tembak"
+            className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_6px_18px_rgba(34,211,238,0.55)]"
+            draggable={false}
+          />
+          {hud.activeHotbarSlot >= 8 && (
+            <span className="pointer-events-none absolute flex h-10 w-10 items-center justify-center rounded-full border border-cyan-300/60 bg-slate-950/75 p-1 shadow-inner backdrop-blur-[1px] sm:h-12 sm:w-12">
+              <img
+                src={activeItemIconSrc}
+                alt="Alat Aktif"
+                className="h-full w-full object-contain drop-shadow"
+                draggable={false}
+              />
+            </span>
+          )}
+          {activeSlotBadgeText !== null && (
+            <span className="pointer-events-none absolute -bottom-0.5 rounded-full border border-cyan-300/60 bg-slate-950/90 px-1.5 font-mono-nums text-[10px] font-black leading-tight text-amber-300 shadow">
+              {activeSlotBadgeText}
+            </span>
           )}
         </button>
       </div>
