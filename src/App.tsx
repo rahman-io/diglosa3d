@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { RotateCw, Smartphone } from 'lucide-react';
 import { soundEngine } from './audio/soundEngine';
 import { BattleQuizModal } from './components/BattleQuizModal';
 import { CaveCraftingModal } from './components/CaveCraftingModal';
@@ -22,7 +23,17 @@ import {
   syncRunToCloud,
 } from './services/leaderboardService';
 import { RpgWorldEngine } from './three/RpgWorldEngine';
-import { isTouchViewport, requestAppFullscreen } from './utils/fullscreen';
+import {
+  getAlwaysFullscreenPref,
+  getLandscapeOnlyPref,
+  initDisplayPreferences,
+  isFullscreenActive,
+  isTouchViewport,
+  lockLandscapeOrientation,
+  requestAppFullscreen,
+  setAlwaysFullscreenPref,
+  setLandscapeOnlyPref,
+} from './utils/fullscreen';
 import {
   BattleContext,
   CaveSealContext,
@@ -153,6 +164,71 @@ function DiglosaRpgApp() {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [cloudSyncNote, setCloudSyncNote] = useState<string | null>(null);
+  const [isPortraitTouch, setIsPortraitTouch] = useState(false);
+  const desktopAutoFsTriedRef = useRef(false);
+
+  // Initialize local display preferences (alwaysFullscreen=true, landscapeOnly=true)
+  // and automatically engage fullscreen + landscape lock on open & first tap
+  useEffect(() => {
+    initDisplayPreferences();
+    void requestAppFullscreen();
+
+    const checkPortraitLock = () => {
+      const portrait =
+        isTouchViewport() && getLandscapeOnlyPref() && window.innerHeight > window.innerWidth;
+      setIsPortraitTouch(portrait);
+    };
+    checkPortraitLock();
+
+    const onOrientationChange = () => {
+      checkPortraitLock();
+      window.setTimeout(() => {
+        checkPortraitLock();
+        window.dispatchEvent(new Event('resize'));
+      }, 150);
+    };
+
+    const onFirstOrTouchInteraction = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('[data-fullscreen-toggle="true"]')) return;
+      if (!getAlwaysFullscreenPref()) return;
+
+      if (isTouchViewport()) {
+        if (!isFullscreenActive()) {
+          void requestAppFullscreen();
+        } else if (getLandscapeOnlyPref()) {
+          void lockLandscapeOrientation();
+        }
+      } else if (!desktopAutoFsTriedRef.current && !isFullscreenActive()) {
+        desktopAutoFsTriedRef.current = true;
+        void requestAppFullscreen();
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isFullscreenActive() && getLandscapeOnlyPref()) {
+        void lockLandscapeOrientation();
+      }
+    };
+
+    window.addEventListener('resize', checkPortraitLock);
+    window.addEventListener('orientationchange', onOrientationChange);
+    document.addEventListener('fullscreenchange', checkPortraitLock);
+    document.addEventListener('webkitfullscreenchange', checkPortraitLock);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pointerdown', onFirstOrTouchInteraction, { capture: true, passive: true });
+    window.addEventListener('keydown', onFirstOrTouchInteraction, { capture: true });
+
+    return () => {
+      window.removeEventListener('resize', checkPortraitLock);
+      window.removeEventListener('orientationchange', onOrientationChange);
+      document.removeEventListener('fullscreenchange', checkPortraitLock);
+      document.removeEventListener('webkitfullscreenchange', checkPortraitLock);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pointerdown', onFirstOrTouchInteraction, { capture: true });
+      window.removeEventListener('keydown', onFirstOrTouchInteraction, { capture: true });
+    };
+  }, []);
 
   // Mount 100% 3D RpgWorldEngine once
   useEffect(() => {
@@ -356,7 +432,7 @@ function DiglosaRpgApp() {
   }, []);
 
   const handleContinue = useCallback(() => {
-    if (isTouchViewport()) void requestAppFullscreen();
+    if (getAlwaysFullscreenPref()) void requestAppFullscreen();
     setActiveBattle(null);
     setActiveLearning(null);
     setActiveAcademySkill(null);
@@ -369,7 +445,7 @@ function DiglosaRpgApp() {
   }, []);
 
   const handleStartNew = useCallback(() => {
-    if (isTouchViewport()) void requestAppFullscreen();
+    if (getAlwaysFullscreenPref()) void requestAppFullscreen();
     setActiveBattle(null);
     setActiveLearning(null);
     setActiveAcademySkill(null);
@@ -426,7 +502,7 @@ function DiglosaRpgApp() {
           onContinue={handleContinue}
           onStartNew={handleStartNew}
           onQuickLearn={(mode) => {
-            if (isTouchViewport()) void requestAppFullscreen();
+            if (getAlwaysFullscreenPref()) void requestAppFullscreen();
             engineRef.current?.startQuickLearning(mode);
           }}
           onOpenLeaderboard={() => setLeaderboardOpen(true)}
@@ -612,6 +688,34 @@ function DiglosaRpgApp() {
         syncing={syncing}
         syncStatus={syncStatus}
       />
+
+      {isPortraitTouch && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0f172a]/95 p-6 text-center text-white backdrop-blur-md">
+          <div className="relative mb-4 flex h-20 w-20 items-center justify-center rounded-3xl border-2 border-amber-300/60 bg-amber-500/15 text-amber-300 shadow-xl">
+            <Smartphone className="h-10 w-10 rotate-90" />
+            <RotateCw className="absolute -right-2 -top-2 h-6 w-6 animate-spin rounded-full bg-slate-900 p-1 text-cyan-300 [animation-duration:3s]" />
+          </div>
+          <h2 className="text-xl font-black tracking-tight text-amber-200">
+            Wajib Posisi Landscape
+          </h2>
+          <p className="mt-2 max-w-xs text-xs font-medium leading-relaxed text-slate-300">
+            Putar HP ke posisi mendatar (landscape), atau ketuk tombol di bawah untuk mengunci
+            layar penuh otomatis dalam mode landscape.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setAlwaysFullscreenPref(true);
+              setLandscapeOnlyPref(true);
+              void requestAppFullscreen(true);
+            }}
+            className="mt-5 inline-flex items-center gap-2 rounded-full border-2 border-[#14532d] bg-gradient-to-b from-[#4ade80] to-[#16a34a] px-6 py-3 text-sm font-black text-white shadow-[0_4px_0_#14532d] transition active:translate-y-0.5"
+          >
+            <RotateCw className="h-4 w-4" />
+            <span>Aktifkan Landscape &amp; Layar Penuh</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

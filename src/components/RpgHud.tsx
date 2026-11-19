@@ -368,6 +368,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
 
           <button
             type="button"
+            data-fullscreen-toggle="true"
             onClick={() => void toggleAppFullscreen()}
             title={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             aria-label={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}

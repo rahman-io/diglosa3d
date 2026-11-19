@@ -107,6 +107,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
           <button
             type="button"
+            data-fullscreen-toggle="true"
             onClick={() => void toggleAppFullscreen()}
             aria-label={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             title={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
