@@ -21,6 +21,13 @@ import {
   LearningSessionContext,
   VocabEntry,
 } from '../types/game';
+import {
+  RpgBoardPanel,
+  RpgChoiceCard,
+  RpgNameplate,
+  RpgPillButton,
+  RpgTimerBar,
+} from './RpgUiKit';
 
 interface LearningModeModalProps {
   session: LearningSessionContext | null;
@@ -398,356 +405,370 @@ export const LearningModeModal: React.FC<LearningModeModalProps> = ({
   const timerRatio = Math.max(0, Math.min(1, timeLeft / Math.max(1, activeMaxSec)));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/75 p-2 sm:p-4">
-      <div className="my-auto max-h-[92dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-[#d6b67c] bg-[#f5e3be] px-5 py-3">
-          <div>
-            <h2 className="text-base font-extrabold">{session.title}</h2>
-            <p className="text-xs font-bold text-[#92400e]">
-              {session.mode === 'match'
-                ? `Pasangan: ${matchedIds.length}/${matchLeft.length} · Langkah: ${matchMoves}`
-                : cekCepatPool
-                ? `Cek Cepat Kartu: ${cekIdx + 1}/${cekCepatPool.length}`
-                : `Kata ${Math.min(idx + 1, words.length)}/${words.length} · +${xpEarned} XP`}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e7d3ad] text-[#5c340f] hover:bg-[#d6b67c]"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* qstrip Visual Timer Bar (Hoot on left, Monster approaching from right!) */}
-        {qtimerEnabled && !resultData && (session.mode !== 'cards' || Boolean(cekCepatPool)) && (
-          <div className="mx-5 mt-3">
-            <div className="relative h-6 overflow-hidden rounded-full border-2 border-[#78350f] bg-[#e7d3ad]">
-              <div
-                className={`h-full transition-all duration-100 ${
-                  timerRatio > 0.35 ? 'bg-emerald-500' : 'bg-rose-500'
-                }`}
-                style={{ width: `${timerRatio * 100}%` }}
-              />
-              <span className="absolute left-2 top-0.5 text-sm">🦉</span>
-              <span
-                className="absolute top-0.5 text-sm transition-all duration-100"
-                style={{ left: `${Math.max(12, timerRatio * 92)}%` }}
-              >
-                👾
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Body */}
-        <div className="p-5">
-          {resultData ? (
-            <div className="space-y-4 text-center">
-              {resultData.stars === 3 && (
-                <div className="text-xs font-extrabold uppercase tracking-wider text-amber-600">
-                  ★ Konfeti Kemenangan Sempurna! ★
-                </div>
-              )}
-              <div className="flex justify-center gap-2">
-                {[1, 2, 3].map((s) => (
-                  <Star
-                    key={s}
-                    className={`h-10 w-10 ${
-                      s <= resultData.stars
-                        ? 'fill-amber-400 text-amber-600'
-                        : 'fill-slate-200 text-slate-300'
-                    }`}
-                  />
-                ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#060b16]/78 p-2 sm:p-4">
+      <div className="my-auto max-h-[94dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y">
+        <RpgBoardPanel>
+          {/* RPG Nameplate Header */}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <RpgNameplate className="min-w-0">
+              <div className="min-w-0 leading-tight">
+                <h2 className="truncate text-sm font-black tracking-tight text-[#3b1b06] sm:text-base">
+                  {session.title}
+                </h2>
+                <p className="truncate text-[10px] font-extrabold text-[#78350f] sm:text-[11px]">
+                  {session.mode === 'match'
+                    ? `Pasangan: ${matchedIds.length}/${matchLeft.length} · Langkah: ${matchMoves}`
+                    : cekCepatPool
+                    ? `Cek Cepat Kartu: ${cekIdx + 1}/${cekCepatPool.length}`
+                    : `Kata ${Math.min(idx + 1, words.length)}/${words.length} · +${xpEarned} XP`}
+                </p>
               </div>
-              <h3 className="text-2xl font-black">Skor: {resultData.pct}%</h3>
-              <p className="text-sm font-bold text-[#78350f]">
-                {resultData.pct >= session.minPct
-                  ? `Hebat! Syarat minimal (${session.minPct}%) terpenuhi! ${resultData.pct >= 70 ? '(+20 XP Bonus Sesi!)' : ''}`
-                  : `Butuh minimal ${session.minPct}% untuk menuntaskan pintu ini. Yuk coba lagi!`}
-              </p>
-              {resultData.cekCepatPassed !== undefined && (
-                <div className="rounded-xl border border-emerald-500 bg-emerald-50 px-4 py-2 text-xs font-extrabold text-emerald-900">
-                  {resultData.cekCepatPassed
-                    ? 'Cek Cepat Lulus (≥2/3)! Bonus +1 ❤️ ditemukan di luar pintu!'
-                    : 'Pintu Kartu tetap terbuka! Jawab ≥2/3 Cek Cepat lain kali untuk hadiah ❤️.'}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() =>
-                  onComplete(
-                    session,
-                    resultData.pct,
-                    xpEarned,
-                    resultData.cekCepatPassed,
-                  )
+            </RpgNameplate>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup tantangan"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-amber-300/60 bg-slate-900/95 text-amber-100 shadow-lg transition hover:bg-slate-800"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* qstrip Ornate RPG Timer Bar (Hoot on left, Monster approaching from right!) */}
+          {qtimerEnabled && !resultData && (session.mode !== 'cards' || Boolean(cekCepatPool)) && (
+            <div className="mb-3">
+              <RpgTimerBar
+                pct={timerRatio * 100}
+                barClassName={
+                  timerRatio > 0.35
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+                    : 'bg-gradient-to-r from-rose-500 to-red-600'
                 }
-                className="w-full rounded-2xl border-2 border-[#14532d] bg-gradient-to-b from-[#4ade80] to-[#16a34a] py-3 text-sm font-black text-white shadow-[0_4px_0_#14532d] hover:brightness-105"
               >
-                Selesai &amp; Lanjutkan
-              </button>
-            </div>
-          ) : cekCepatPool ? (
-            <div className="space-y-3">
-              <div className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-extrabold text-amber-900">
-                Cek Cepat 3 Soal! Jawab benar ≥ 2/3 untuk menjatuhkan Hati (+1 ❤️)!
-              </div>
-              <h3 className="text-lg font-extrabold">{cekCepatPool[cekIdx].prompt}</h3>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {cekCepatPool[cekIdx].choices.map((c, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    disabled={Boolean(feedback)}
-                    onClick={() => handleCekCepatPick(i)}
-                    className="rounded-xl border-2 border-[#c4a472] bg-white px-4 py-3 text-left text-sm font-bold hover:border-amber-500 hover:bg-amber-50"
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-              {feedback && (
-                <div
-                  className={`rounded-xl px-3 py-2 text-center text-xs font-extrabold ${
-                    feedback.ok ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
-                  }`}
-                >
-                  {feedback.msg}
-                </div>
-              )}
-            </div>
-          ) : session.mode === 'cards' && currentWord ? (
-            <div className="space-y-4">
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playFlip();
-                  setFlipped((f) => !f);
-                }}
-                className="flex min-h-[190px] w-full flex-col items-center justify-center rounded-2xl border-4 border-[#b45309] bg-white p-6 text-center shadow-lg transition hover:bg-[#fffbeb]"
-              >
-                <span className="rounded-full bg-[#f5e3be] px-3 py-0.5 text-xs font-extrabold text-[#78350f]">
-                  {cat?.icon} {cat?.name}
+                <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] leading-none">
+                  🦉
                 </span>
-                {!flipped ? (
-                  <>
-                    <div className="mt-3 text-3xl font-black text-[#0f172a]">{currentWord.word}</div>
-                    <div className="mt-1 font-mono-nums text-xs text-[#92400e]">
-                      {currentWord.phonetic}
-                    </div>
-                    <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-[#78350f]">
-                      <RotateCw className="h-3.5 w-3.5" />
-                      <span>Klik kartu untuk balik &amp; lihat arti</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="mt-3 text-2xl font-black text-emerald-700">
-                      {currentWord.meaningId}
-                    </div>
-                    <div className="mt-1 text-sm font-bold text-[#5c340f]">{currentWord.word}</div>
-                    <p className="mt-2 text-xs italic text-[#78350f]">{currentWord.exampleId}</p>
-                  </>
+                <span
+                  className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[11px] leading-none transition-all duration-100"
+                  style={{ left: `${Math.max(10, timerRatio * 90)}%` }}
+                >
+                  👾
+                </span>
+              </RpgTimerBar>
+            </div>
+          )}
+
+          {/* Body */}
+          <div>
+            {resultData ? (
+              <div className="space-y-4 rounded-2xl border border-amber-300/25 bg-slate-950/50 p-5 text-center">
+                {resultData.stars === 3 && (
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                    ★ Konfeti Kemenangan Sempurna! ★
+                  </div>
                 )}
-              </button>
-
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => soundEngine.speakEnglish(currentWord.word)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#78350f] bg-[#f5e3be] px-3.5 py-2.5 text-xs font-extrabold text-[#5c340f]"
-                >
-                  <Volume2 className="h-4 w-4" />
-                  <span>Dengar</span>
-                </button>
-                <div className="flex flex-1 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleCardMark(false)}
-                    className="flex-1 rounded-xl border-2 border-[#78350f] bg-white py-2.5 text-xs font-extrabold text-[#5c340f] hover:bg-[#f5e3be]"
-                  >
-                    Ulangi Nanti
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCardMark(true)}
-                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-[#14532d] bg-emerald-600 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-500"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Sudah Hafal (+5 XP)</span>
-                  </button>
+                <div className="flex justify-center gap-2">
+                  {[1, 2, 3].map((s) => (
+                    <Star
+                      key={s}
+                      className={`h-10 w-10 ${
+                        s <= resultData.stars
+                          ? 'fill-amber-400 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.65)]'
+                          : 'fill-slate-800 text-slate-600'
+                      }`}
+                    />
+                  ))}
                 </div>
-              </div>
-            </div>
-          ) : (session.mode === 'quiz' || session.mode === 'listen') && mcq ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-lg font-extrabold">{mcq.prompt}</h3>
-                <button
-                  type="button"
-                  onClick={() => soundEngine.speakEnglish(mcq.entry.word, 0.85)}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#b45309]/50 bg-[#fef3c7] px-3 py-1.5 text-xs font-extrabold text-[#78350f]"
+                <h3 className="text-2xl font-black text-white">Skor: {resultData.pct}%</h3>
+                <p className="text-sm font-bold text-amber-200/90">
+                  {resultData.pct >= session.minPct
+                    ? `Hebat! Syarat minimal (${session.minPct}%) terpenuhi! ${resultData.pct >= 70 ? '(+20 XP Bonus Sesi!)' : ''}`
+                    : `Butuh minimal ${session.minPct}% untuk menuntaskan pintu ini. Yuk coba lagi!`}
+                </p>
+                {resultData.cekCepatPassed !== undefined && (
+                  <div className="rounded-xl border border-emerald-400/50 bg-emerald-950/60 px-4 py-2 text-xs font-extrabold text-emerald-200">
+                    {resultData.cekCepatPassed
+                      ? 'Cek Cepat Lulus (≥2/3)! Bonus +1 ❤️ ditemukan di luar pintu!'
+                      : 'Pintu Kartu tetap terbuka! Jawab ≥2/3 Cek Cepat lain kali untuk hadiah ❤️.'}
+                  </div>
+                )}
+                <RpgPillButton
+                  variant="green"
+                  onClick={() =>
+                    onComplete(
+                      session,
+                      resultData.pct,
+                      xpEarned,
+                      resultData.cekCepatPassed,
+                    )
+                  }
+                  className="w-full"
                 >
-                  <Volume2 className="h-4 w-4" />
-                  <span>Putar</span>
-                </button>
+                  <span>Selesai &amp; Lanjutkan</span>
+                </RpgPillButton>
               </div>
-
-              {session.mode === 'listen' && (
-                <div className="flex items-center justify-between rounded-xl border border-[#d6b67c] bg-white px-3 py-2 text-xs">
-                  {peeked ? (
-                    <span className="font-extrabold text-amber-800">
-                      Kata: &ldquo;{mcq.entry.word}&rdquo; (XP separuh, penguasaan tidak naik)
-                    </span>
+            ) : cekCepatPool ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-400/40 bg-amber-500/20 px-3 py-2 text-xs font-extrabold text-amber-200">
+                  Cek Cepat 3 Soal! Jawab benar ≥ 2/3 untuk menjatuhkan Hati (+1 ❤️)!
+                </div>
+                <div className="rounded-2xl border border-amber-300/20 bg-slate-950/45 px-4 py-3">
+                  <h3 className="text-base font-extrabold text-white sm:text-lg">
+                    {cekCepatPool[cekIdx].prompt}
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {cekCepatPool[cekIdx].choices.map((c, i) => (
+                    <RpgChoiceCard
+                      key={i}
+                      tone={feedback ? 'muted' : 'default'}
+                      disabled={Boolean(feedback)}
+                      onClick={() => handleCekCepatPick(i)}
+                      className="flex items-center gap-2.5 px-2.5 py-2 text-sm"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-amber-300/50 bg-amber-500/20 font-mono-nums text-xs font-black text-amber-200">
+                        {i + 1}
+                      </span>
+                      <span className="font-extrabold">{c}</span>
+                    </RpgChoiceCard>
+                  ))}
+                </div>
+                {feedback && (
+                  <div
+                    className={`rounded-xl border px-3 py-2 text-center text-xs font-extrabold ${
+                      feedback.ok
+                        ? 'border-emerald-400/50 bg-emerald-950/65 text-emerald-200'
+                        : 'border-rose-400/50 bg-rose-950/65 text-rose-200'
+                    }`}
+                  >
+                    {feedback.msg}
+                  </div>
+                )}
+              </div>
+            ) : session.mode === 'cards' && currentWord ? (
+              <div className="space-y-3.5">
+                <RpgChoiceCard
+                  onClick={() => {
+                    soundEngine.playFlip();
+                    setFlipped((f) => !f);
+                  }}
+                  className="flex min-h-[185px] w-full flex-col items-center justify-center px-5 py-6 text-center"
+                >
+                  <span className="rounded-full border border-amber-300/40 bg-amber-500/20 px-3 py-0.5 text-xs font-extrabold text-amber-200">
+                    {cat?.icon} {cat?.name}
+                  </span>
+                  {!flipped ? (
+                    <>
+                      <div className="mt-3 text-3xl font-black text-white">{currentWord.word}</div>
+                      <div className="mt-1 font-mono-nums text-xs text-amber-200/85">
+                        {currentWord.phonetic}
+                      </div>
+                      <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-sky-200">
+                        <RotateCw className="h-3.5 w-3.5" />
+                        <span>Klik kartu untuk balik &amp; lihat arti</span>
+                      </div>
+                    </>
                   ) : (
-                    <span className="font-semibold text-[#78350f]">
-                      Dengar pelafalan atau intip kata jika ragu.
-                    </span>
+                    <>
+                      <div className="mt-3 text-2xl font-black text-emerald-300">
+                        {currentWord.meaningId}
+                      </div>
+                      <div className="mt-1 text-sm font-bold text-amber-200">{currentWord.word}</div>
+                      <p className="mt-2 text-xs italic text-slate-300">{currentWord.exampleId}</p>
+                    </>
                   )}
-                  {!peeked && (
-                    <button
-                      type="button"
-                      onClick={() => setPeeked(true)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2.5 py-1 font-extrabold text-amber-900 hover:bg-amber-200"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>Intip arti</span>
-                    </button>
-                  )}
-                </div>
-              )}
+                </RpgChoiceCard>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {mcq.choices.map((c, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    disabled={Boolean(feedback)}
-                    onClick={() => handleMcqPick(i)}
-                    className="flex items-center gap-2 rounded-xl border-2 border-[#c4a472] bg-white px-3.5 py-3 text-left text-sm font-bold hover:border-amber-500 hover:bg-amber-50"
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <RpgPillButton
+                    variant="gold"
+                    size="sm"
+                    onClick={() => soundEngine.speakEnglish(currentWord.word)}
                   >
-                    <span className="flex h-6 w-6 items-center justify-center rounded bg-[#e7d3ad] font-mono-nums text-xs font-black">
-                      {i + 1}
-                    </span>
-                    <span>{c}</span>
+                    <Volume2 className="h-4 w-4 shrink-0" />
+                    <span>Dengar</span>
+                  </RpgPillButton>
+                  <div className="flex flex-1 gap-2">
+                    <RpgPillButton
+                      variant="cream"
+                      size="sm"
+                      onClick={() => handleCardMark(false)}
+                      className="flex-1"
+                    >
+                      <span>Ulangi Nanti</span>
+                    </RpgPillButton>
+                    <RpgPillButton
+                      variant="green"
+                      size="sm"
+                      onClick={() => handleCardMark(true)}
+                      className="flex-1"
+                    >
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <span>Sudah Hafal (+5 XP)</span>
+                    </RpgPillButton>
+                  </div>
+                </div>
+              </div>
+            ) : (session.mode === 'quiz' || session.mode === 'listen') && mcq ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-300/20 bg-slate-950/45 px-3.5 py-2.5">
+                  <h3 className="text-base font-extrabold text-white sm:text-lg">{mcq.prompt}</h3>
+                  <button
+                    type="button"
+                    onClick={() => soundEngine.speakEnglish(mcq.entry.word, 0.85)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-amber-300/40 bg-amber-400/20 px-3 py-1.5 text-xs font-extrabold text-amber-200 hover:bg-amber-400/35"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                    <span>Putar</span>
                   </button>
-                ))}
-              </div>
-
-              {feedback && (
-                <div
-                  className={`rounded-xl px-3 py-2 text-center text-xs font-extrabold ${
-                    feedback.ok ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
-                  }`}
-                >
-                  {feedback.msg}
                 </div>
-              )}
-            </div>
-          ) : session.mode === 'type' && currentWord ? (
-            <form onSubmit={handleSubmitType} className="space-y-4">
-              <div className="rounded-2xl border-2 border-[#d6b67c] bg-white p-4 text-center">
-                <div className="text-xs font-bold uppercase text-[#92400e]">Eja dalam Bahasa Inggris:</div>
-                <div className="mt-1 text-2xl font-black">{currentWord.meaningId}</div>
-                <div className="mt-2 font-mono-nums text-sm tracking-widest text-amber-700">
-                  {currentWord.word
-                    .split('')
-                    .map((ch, i) => (ch === ' ' ? '  ' : i < typeHints ? ch : '_'))
-                    .join(' ')}
-                </div>
-              </div>
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  autoFocus
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  placeholder="Ketik kata Inggris..."
-                  className="flex-1 rounded-xl border-2 border-[#78350f] bg-white px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => setTypeHints((h) => Math.min(currentWord.word.length - 1, h + 1))}
-                  className="inline-flex items-center gap-1 rounded-xl border-2 border-[#78350f] bg-[#f5e3be] px-3 py-2 text-xs font-extrabold text-[#5c340f]"
-                >
-                  <HelpCircle className="h-4 w-4" />
-                  <span>Petunjuk</span>
-                </button>
-              </div>
+                {session.mode === 'listen' && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300/20 bg-slate-950/40 px-3 py-2 text-xs">
+                    {peeked ? (
+                      <span className="font-extrabold text-amber-200">
+                        Kata: &ldquo;{mcq.entry.word}&rdquo; (XP separuh, penguasaan tidak naik)
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-amber-100/80">
+                        Dengar pelafalan atau intip kata jika ragu.
+                      </span>
+                    )}
+                    {!peeked && (
+                      <button
+                        type="button"
+                        onClick={() => setPeeked(true)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-amber-300/35 bg-amber-500/20 px-2.5 py-1 font-extrabold text-amber-200 hover:bg-amber-500/35"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>Intip kata</span>
+                      </button>
+                    )}
+                  </div>
+                )}
 
-              <button
-                type="submit"
-                className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-black text-white hover:bg-emerald-500"
-              >
-                Periksa Ejaan (Sisa {2 - typeTries}x)
-              </button>
-
-              {feedback && (
-                <div
-                  className={`rounded-xl px-3 py-2 text-center text-xs font-extrabold ${
-                    feedback.ok ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
-                  }`}
-                >
-                  {feedback.msg}
-                </div>
-              )}
-            </form>
-          ) : session.mode === 'match' ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                {matchLeft.map((item) => {
-                  const done = matchedIds.includes(item.id);
-                  const sel = selLeftId === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      disabled={done}
-                      onClick={() => {
-                        setSelLeftId(item.id);
-                        soundEngine.speakEnglish(item.word);
-                      }}
-                      className={`w-full rounded-xl border-2 px-3 py-2.5 text-left text-xs font-extrabold transition ${
-                        done
-                          ? 'border-emerald-500 bg-emerald-100 text-emerald-800 opacity-55'
-                          : sel
-                          ? 'border-amber-600 bg-amber-100 text-amber-950'
-                          : 'border-[#c4a472] bg-white hover:bg-amber-50'
-                      }`}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {mcq.choices.map((c, i) => (
+                    <RpgChoiceCard
+                      key={i}
+                      tone={feedback ? 'muted' : 'default'}
+                      disabled={Boolean(feedback)}
+                      onClick={() => handleMcqPick(i)}
+                      className="flex items-center gap-2.5 px-2.5 py-2 text-sm"
                     >
-                      {item.word}
-                    </button>
-                  );
-                })}
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-amber-300/50 bg-amber-500/20 font-mono-nums text-xs font-black text-amber-200">
+                        {i + 1}
+                      </span>
+                      <span className="font-extrabold">{c}</span>
+                    </RpgChoiceCard>
+                  ))}
+                </div>
+
+                {feedback && (
+                  <div
+                    className={`rounded-xl border px-3 py-2 text-center text-xs font-extrabold ${
+                      feedback.ok
+                        ? 'border-emerald-400/50 bg-emerald-950/65 text-emerald-200'
+                        : 'border-rose-400/50 bg-rose-950/65 text-rose-200'
+                    }`}
+                  >
+                    {feedback.msg}
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                {matchRight.map((item) => {
-                  const done = matchedIds.includes(item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      disabled={done || !selLeftId}
-                      onClick={() => handlePickRightMatch(item)}
-                      className={`w-full rounded-xl border-2 px-3 py-2.5 text-left text-xs font-bold transition ${
-                        done
-                          ? 'border-emerald-500 bg-emerald-100 text-emerald-800 opacity-55'
-                          : 'border-[#c4a472] bg-white hover:border-emerald-500 hover:bg-emerald-50'
-                      }`}
-                    >
-                      {item.meaningId}
-                    </button>
-                  );
-                })}
+            ) : session.mode === 'type' && currentWord ? (
+              <form onSubmit={handleSubmitType} className="space-y-3.5">
+                <div className="rounded-2xl border border-amber-300/25 bg-slate-950/55 p-4 text-center shadow-inner">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                    Eja dalam Bahasa Inggris:
+                  </div>
+                  <div className="mt-1 text-2xl font-black text-white">{currentWord.meaningId}</div>
+                  <div className="mt-2 font-mono-nums text-sm font-bold tracking-widest text-amber-200">
+                    {currentWord.word
+                      .split('')
+                      .map((ch, i) => (ch === ' ' ? '  ' : i < typeHints ? ch : '_'))
+                      .join(' ')}
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    placeholder="Ketik kata Inggris..."
+                    className="flex-1 rounded-xl border-2 border-amber-300/40 bg-slate-950/75 px-4 py-2.5 text-sm font-bold text-white placeholder-slate-400 focus:border-amber-300 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTypeHints((h) => Math.min(currentWord.word.length - 1, h + 1))}
+                    className="inline-flex items-center gap-1 rounded-xl border border-amber-300/40 bg-amber-500/20 px-3 py-2 text-xs font-extrabold text-amber-200 hover:bg-amber-500/35"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    <span>Petunjuk</span>
+                  </button>
+                </div>
+
+                <RpgPillButton type="submit" variant="green" className="w-full">
+                  <span>Periksa Ejaan (Sisa {2 - typeTries}x)</span>
+                </RpgPillButton>
+
+                {feedback && (
+                  <div
+                    className={`rounded-xl border px-3 py-2 text-center text-xs font-extrabold ${
+                      feedback.ok
+                        ? 'border-emerald-400/50 bg-emerald-950/65 text-emerald-200'
+                        : 'border-rose-400/50 bg-rose-950/65 text-rose-200'
+                    }`}
+                  >
+                    {feedback.msg}
+                  </div>
+                )}
+              </form>
+            ) : session.mode === 'match' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  {matchLeft.map((item) => {
+                    const done = matchedIds.includes(item.id);
+                    const sel = selLeftId === item.id;
+                    return (
+                      <RpgChoiceCard
+                        key={item.id}
+                        tone={done ? 'correct' : sel ? 'selected' : 'default'}
+                        disabled={done}
+                        onClick={() => {
+                          setSelLeftId(item.id);
+                          soundEngine.speakEnglish(item.word);
+                        }}
+                        className="w-full px-2.5 py-2 text-xs font-extrabold"
+                      >
+                        {item.word}
+                      </RpgChoiceCard>
+                    );
+                  })}
+                </div>
+                <div className="space-y-2">
+                  {matchRight.map((item) => {
+                    const done = matchedIds.includes(item.id);
+                    return (
+                      <RpgChoiceCard
+                        key={item.id}
+                        tone={done ? 'correct' : !selLeftId ? 'muted' : 'default'}
+                        disabled={done || !selLeftId}
+                        onClick={() => handlePickRightMatch(item)}
+                        className="w-full px-2.5 py-2 text-xs font-bold"
+                      >
+                        {item.meaningId}
+                      </RpgChoiceCard>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        </RpgBoardPanel>
       </div>
     </div>
   );

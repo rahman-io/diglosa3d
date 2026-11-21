@@ -23,6 +23,38 @@ import {
   RelicId,
   WordProgress,
 } from '../types/game';
+import {
+  RpgBoardPanel,
+  RpgChoiceCard,
+  RpgChoiceTone,
+  RpgPillButton,
+  RpgTimerBar,
+} from './RpgUiKit';
+import { BattleAnimEvent, BattleArenaCanvas } from './BattleArenaCanvas';
+
+const WIN_CONFETTI_COLORS = [
+  'bg-amber-300',
+  'bg-emerald-400',
+  'bg-sky-400',
+  'bg-rose-400',
+  'bg-yellow-200',
+  'bg-orange-400',
+];
+
+const LOSS_CONFETTI_COLORS = [
+  'bg-rose-500',
+  'bg-purple-500',
+  'bg-slate-400',
+  'bg-amber-500/80',
+];
+
+const CONFETTI_PIECES = Array.from({ length: 20 }, (_, i) => ({
+  id: i,
+  leftPct: 6 + ((i * 4.7) % 88),
+  delayMs: (i % 5) * 75,
+  dxPx: ((i % 2 === 0 ? 1 : -1) * (10 + (i % 4) * 9)),
+  rotDeg: (i % 2 === 0 ? 1 : -1) * (240 + (i % 5) * 65),
+}));
 
 interface BattleQuizModalProps {
   battle: BattleContext | null;
@@ -93,10 +125,17 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
   const [duelHitStreak, setDuelHitStreak] = useState(0);
   const [duelAmmoGained, setDuelAmmoGained] = useState(0);
   const [bossTaunt, setBossTaunt] = useState<string | null>(null);
+  const [animEvent, setAnimEvent] = useState<BattleAnimEvent>('idle');
+  const [animTick, setAnimTick] = useState(0);
 
   const timeoutRef = useRef<number | null>(null);
   const grabTimerRef = useRef(diffCfg.grabSec);
   const answerTimerRef = useRef(diffCfg.duelAnswerSec);
+
+  const triggerAnim = useCallback((kind: BattleAnimEvent) => {
+    setAnimEvent(kind);
+    setAnimTick((t) => t + 1);
+  }, []);
 
   const clearPendingTimeout = () => {
     if (timeoutRef.current !== null) {
@@ -205,6 +244,8 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
     setDuelHitStreak(0);
     setDuelAmmoGained(0);
     setBossTaunt(bossDef ? bossDef.taunts[0] : null);
+    setAnimEvent('idle');
+    setAnimTick(0);
 
     const firstQ = pickNextQuestion(battle, 1, 0, null, false);
     setQuestion(firstQ);
@@ -229,6 +270,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
         setQuestion(nextQ);
         setTurnCount(nextTurnCount);
         setTurnPhase('grab');
+        setAnimEvent('idle');
         setupTurnModifiers(b, nextQ, nextPhase, nextTurnCount);
       }, delayMs);
     },
@@ -249,6 +291,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
         setFeedbackGood(true);
         setFeedbackMsg(`🛡️ Perisai Panci menangkis serangan! (${reasonMsg}) Nyawamu aman!`);
         soundEngine.playPick();
+        triggerAnim('monster_attack');
         scheduleNextTurn(b, bossPhase, turnCount + 1, q, 1300);
         return;
       }
@@ -266,9 +309,12 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
       setFeedbackGood(false);
       setFeedbackMsg(`${reasonMsg} (-1 ❤️)`);
 
+      const isDefeatKo = nextHp <= 0;
+      triggerAnim(isDefeatKo ? 'hero_ko' : 'monster_attack');
+
       clearPendingTimeout();
       timeoutRef.current = window.setTimeout(() => {
-        if (nextHp <= 0) {
+        if (isDefeatKo) {
           onBattleEnd('defeat', b);
         } else {
           const nextQ = pickNextQuestion(b, bossPhase, turnCount + 1, q, false);
@@ -276,9 +322,10 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
           setQuestion(nextQ);
           setTurnCount(turnCount + 1);
           setTurnPhase('grab');
+          setAnimEvent('idle');
           setupTurnModifiers(b, nextQ, bossPhase, turnCount + 1);
         }
-      }, 1350);
+      }, isDefeatKo ? 1850 : 1350);
     },
     [
       hasPerisai,
@@ -291,6 +338,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
       pickNextQuestion,
       setupTurnModifiers,
       scheduleNextTurn,
+      triggerAnim,
     ],
   );
 
@@ -365,11 +413,12 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
   const handleGrab = useCallback(() => {
     if (!battle || turnPhase !== 'grab') return;
     setTurnPhase('answer');
+    triggerAnim('grab_ready');
     soundEngine.playDash();
     if (question) {
       soundEngine.speakEnglish(question.audioWord);
     }
-  }, [battle, turnPhase, question]);
+  }, [battle, turnPhase, question, triggerAnim]);
 
   const handleUsePeluit = () => {
     if (!question || peluitUsed || turnPhase !== 'answer') return;
@@ -429,11 +478,15 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
           `Tepat! "${question.choices[question.correctIndex]}" → ${dmg} Damage!${ammoNote}${healNote}`,
         );
 
+        const bossDef = battle.isZoneBoss ? BOSSES[battle.zoneId] : null;
+        const isTerminalVictory =
+          nextMonsterHp <= 0 && (!bossDef || bossPhase >= bossDef.phases);
+        triggerAnim(isTerminalVictory ? 'monster_ko' : 'hero_attack');
+
         clearPendingTimeout();
         timeoutRef.current = window.setTimeout(() => {
           if (nextMonsterHp <= 0) {
             // Check 3-Phase Zone Boss transition
-            const bossDef = battle.isZoneBoss ? BOSSES[battle.zoneId] : null;
             if (bossDef && bossPhase < bossDef.phases) {
               const nextPhase = bossPhase + 1;
               setBossPhase(nextPhase);
@@ -447,6 +500,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
               setQuestion(nextQ);
               setTurnCount(turnCount + 1);
               setTurnPhase('grab');
+              setAnimEvent('idle');
               setupTurnModifiers(battle, nextQ, nextPhase, turnCount + 1);
             } else {
               onBattleEnd('victory', { ...battle, monsterHp: 0 });
@@ -457,9 +511,10 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
             setQuestion(nextQ);
             setTurnCount(turnCount + 1);
             setTurnPhase('grab');
+            setAnimEvent('idle');
             setupTurnModifiers(battle, nextQ, bossPhase, turnCount + 1);
           }
-        }, 1050);
+        }, isTerminalVictory ? 1850 : 1050);
       } else {
         // Boss Grow mechanic: Phase 2-3 heals boss +1 HP up to 2x per phase
         const bossDef = battle.isZoneBoss ? BOSSES[battle.zoneId] : null;
@@ -499,6 +554,7 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
       growHealsInPhase,
       monsterMaxHp,
       handleMonsterAttack,
+      triggerAnim,
     ],
   );
 
@@ -523,272 +579,325 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
   if (!battle || !question) return null;
 
   const grabPct = Math.max(0, Math.min(100, (grabTimer / Math.max(0.5, grabWindowMax)) * 100));
+  const timerPct =
+    turnPhase === 'grab'
+      ? grabPct
+      : turnPhase === 'answer' && diffCfg.duelAnswerSec > 0
+      ? Math.max(0, (answerTimer / diffCfg.duelAnswerSec) * 100)
+      : 100;
   const bossDef = battle.isZoneBoss ? BOSSES[battle.zoneId] : null;
 
+  const isKoWin = animEvent === 'monster_ko';
+  const isKoLoss = animEvent === 'hero_ko';
+  const showKoOverlay = isKoWin || isKoLoss;
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#0f172a]/75 p-2 sm:p-4">
-      <div className="my-auto max-h-[94dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-2xl border-4 border-[#78350f] bg-[#fff7e6] text-[#3b2008] shadow-2xl sm:rounded-3xl">
-        {/* Top VS Header */}
-        <div className="flex items-center justify-between border-b-2 border-[#d6b67c] bg-[#f5e3be] px-3.5 py-2 sm:px-5 sm:py-3">
-          <div>
-            <div className="text-xs font-extrabold sm:text-sm">Hoot (Pengelana)</div>
-            <div className="mt-0.5 flex items-center gap-0.5 sm:mt-1 sm:gap-1">
-              {Array.from({ length: playerMaxHp }).map((_, i) => (
-                <Heart
-                  key={i}
-                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${
-                    i < localPlayerHp ? 'fill-rose-500 text-rose-600' : 'fill-slate-300 text-slate-400'
-                  }`}
-                />
-              ))}
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto overscroll-contain touch-pan-y bg-[#060b16]/78 p-2 sm:p-4">
+      <div className="my-auto max-h-[95dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y">
+        <RpgBoardPanel>
+          {/* Inside-Panel Top Clash VS Header */}
+          <div className="mb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
+            {/* Hero Side HUD Box */}
+            <div className="min-w-0 rounded-xl border border-emerald-400/35 bg-slate-950/60 px-2.5 py-1.5 shadow-inner">
+              <div className="truncate text-xs font-black text-amber-100 drop-shadow sm:text-sm">
+                Hoot (Pengelana)
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-0.5 sm:gap-1">
+                {Array.from({ length: playerMaxHp }).map((_, i) => (
+                  <Heart
+                    key={i}
+                    className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${
+                      i < localPlayerHp
+                        ? 'fill-rose-500 text-rose-300 drop-shadow-[0_0_4px_rgba(244,63,94,0.7)]'
+                        : 'fill-slate-800 text-slate-600'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Center VS Winged Emblem */}
+            <div className="flex flex-col items-center justify-center px-1">
+              <img
+                src="./assets/ui/ui_vs_badge.png"
+                alt="VS"
+                className="h-11 w-auto select-none object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,0.7)] sm:h-14"
+                draggable={false}
+              />
+              {bossDef && (
+                <div className="-mt-1 rounded-full border border-purple-400/50 bg-purple-950/90 px-2 py-0.5 font-mono-nums text-[9px] font-black tracking-wider text-amber-200 shadow sm:text-[10px]">
+                  FASE {bossPhase}/{bossDef.phases}
+                </div>
+              )}
+            </div>
+
+            {/* Monster Side HUD Box */}
+            <div className="min-w-0 rounded-xl border border-purple-400/35 bg-slate-950/60 px-2.5 py-1.5 text-right shadow-inner">
+              <div className="truncate text-xs font-black text-amber-100 drop-shadow sm:text-sm">
+                {battle.monsterName}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center justify-end gap-0.5">
+                {Array.from({ length: monsterMaxHp }).map((_, i) => (
+                  <Shield
+                    key={i}
+                    className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${
+                      i < monsterHp
+                        ? 'fill-purple-500 text-purple-200 drop-shadow-[0_0_4px_rgba(168,85,247,0.65)]'
+                        : 'fill-slate-800 text-slate-600'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="text-center">
-            <div className="rounded-lg bg-[#b91c1c] px-2.5 py-0.5 font-mono-nums text-xs font-black tracking-wider text-white shadow sm:rounded-xl sm:px-3 sm:py-1 sm:text-sm">
-              VS
+          {/* Boss Mechanic & Taunt Banner */}
+          {bossDef && (
+            <div className="mb-2 rounded-xl border border-purple-400/40 bg-purple-950/70 px-3 py-1 text-center text-[10px] font-bold text-amber-200 sm:text-[11px]">
+              {bossTaunt || bossDef.mechanicDesc}
             </div>
-            {bossDef && (
-              <div className="mt-0.5 font-mono-nums text-[10px] font-black text-purple-900">
-                FASE {bossPhase}/{bossDef.phases}
+          )}
+
+          {/* Live 3D Character & Monster Battle Arena Stage */}
+          <div className="relative h-28 overflow-hidden rounded-xl shadow-[0_6px_18px_rgba(0,0,0,0.55)] sm:h-36">
+            <img
+              src="./assets/ui/ui_battle_arena.png"
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
+              draggable={false}
+            />
+
+            {/* Real-Time Three.js Animated 3D Hero & Monster Fighters */}
+            <BattleArenaCanvas
+              monsterType={battle.monsterType}
+              isBoss={Boolean(battle.isZoneBoss || battle.isIeltsBoss)}
+              eventKind={animEvent}
+              eventTick={animTick}
+            />
+
+            {/* Active Relic Badges Centered at Top */}
+            <div className="pointer-events-none absolute inset-x-2 top-2 z-10 flex flex-wrap items-center justify-center gap-1.5">
+              {hasPerisai && (
+                <span
+                  title={RELICS.perisai.desc}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-black shadow ${
+                    shieldUsed
+                      ? 'border-slate-500/50 bg-slate-900/85 text-slate-400 line-through'
+                      : 'border-sky-400/60 bg-sky-950/90 text-sky-200'
+                  }`}
+                >
+                  🛡️ {shieldUsed ? 'Terpakai' : 'Perisai Siap'}
+                </span>
+              )}
+              {hasPeluit && turnPhase === 'answer' && !peluitUsed && (
+                <button
+                  type="button"
+                  onClick={handleUsePeluit}
+                  className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-emerald-300/60 bg-emerald-600/95 px-2.5 py-0.5 text-[10px] font-black text-white shadow hover:bg-emerald-500 sm:text-[11px]"
+                >
+                  <span>🎵 Peluit (-1 Opsi)</span>
+                </button>
+              )}
+              {hasJam && turnPhase !== 'feedback' && !jamUsed && (
+                <button
+                  type="button"
+                  onClick={handleUseJam}
+                  className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-500/95 px-2.5 py-0.5 text-[10px] font-black text-slate-950 shadow hover:bg-amber-400 sm:text-[11px]"
+                >
+                  <span>⏳ Bekukan Giliran</span>
+                </button>
+              )}
+              {turnFrozen && (
+                <span className="rounded-full border border-cyan-300/60 bg-cyan-700/95 px-2.5 py-0.5 text-[10px] font-black text-white shadow">
+                  ❄️ Waktu Dibekukan!
+                </span>
+              )}
+            </div>
+
+            {/* Bottom Corner Category & Monster HP Pills */}
+            <div className="pointer-events-none absolute bottom-2 left-2.5 z-10 rounded-md border border-emerald-400/45 bg-slate-950/85 px-2 py-0.5 text-[9px] font-extrabold text-emerald-200 shadow sm:text-[10px]">
+              {question.category}
+            </div>
+            <div className="pointer-events-none absolute bottom-2 right-2.5 z-10 rounded-md border border-amber-400/45 bg-slate-950/85 px-2 py-0.5 font-mono-nums text-[9px] font-extrabold text-amber-300 shadow sm:text-[10px]">
+              HP {monsterHp}/{monsterMaxHp}
+            </div>
+
+            {/* Victory / Defeat Confetti & K.O.! Impact Stamp */}
+            {showKoOverlay && (
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden">
+                {CONFETTI_PIECES.map((c) => {
+                  const palette = isKoWin ? WIN_CONFETTI_COLORS : LOSS_CONFETTI_COLORS;
+                  const colorClass = palette[c.id % palette.length];
+                  return (
+                    <span
+                      key={c.id}
+                      style={
+                        {
+                          left: `${c.leftPct}%`,
+                          top: '-10px',
+                          animationDelay: `${c.delayMs}ms`,
+                          '--confetti-dx': `${c.dxPx}px`,
+                          '--confetti-rot': `${c.rotDeg}deg`,
+                        } as React.CSSProperties
+                      }
+                      className={`animate-confetti-fall absolute h-2.5 w-1.5 rounded-sm shadow ${colorClass}`}
+                    />
+                  );
+                })}
+                <div
+                  className={`animate-ko-pop rounded-2xl border-2 px-4 py-1.5 text-center shadow-[0_10px_28px_rgba(0,0,0,0.85)] ${
+                    isKoWin
+                      ? 'border-amber-200 bg-gradient-to-br from-amber-400 via-orange-500 to-emerald-600 text-white'
+                      : 'border-rose-300 bg-gradient-to-br from-rose-600 via-red-700 to-purple-900 text-white'
+                  }`}
+                >
+                  <div className="text-xl font-black tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] sm:text-2xl">
+                    K.O.! {isKoWin ? 'MENANG!' : 'KALAH!'}
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="text-right">
-            <div className="text-xs font-extrabold sm:text-sm">{battle.monsterName}</div>
-            <div className="mt-0.5 flex items-center justify-end gap-0.5 sm:mt-1">
-              {Array.from({ length: monsterMaxHp }).map((_, i) => (
-                <Shield
-                  key={i}
-                  className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${
-                    i < monsterHp ? 'fill-purple-600 text-purple-800' : 'fill-slate-300 text-slate-400'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Boss Mechanic & Taunt Banner */}
-        {bossDef && (
-          <div className="border-b border-[#d6b67c] bg-purple-950 px-3.5 py-1 text-center text-[10px] font-bold text-amber-200 sm:px-5 sm:py-1.5 sm:text-[11px]">
-            {bossTaunt || bossDef.mechanicDesc}
-          </div>
-        )}
-
-        {/* Visual Arena Strip + Active Relic Buttons */}
-        <div className="relative mx-3.5 mt-2 flex h-14 items-center justify-between overflow-hidden rounded-xl border-2 border-[#b45309]/50 bg-gradient-to-b from-[#fde68a] via-[#fef3c7] to-[#84cc16] px-3.5 sm:mx-5 sm:mt-3.5 sm:h-24 sm:rounded-2xl sm:px-6">
-          <div className="flex items-center gap-2 sm:flex-col sm:gap-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#0f172a] bg-emerald-500 text-base font-black text-white shadow-md sm:h-12 sm:w-12 sm:rounded-2xl sm:text-xl">
-              🦉
-            </div>
-            <span className="rounded bg-[#0f172a]/85 px-1.5 py-0.5 text-[9px] font-bold text-white sm:mt-1 sm:px-2 sm:text-[10px]">
-              {question.category}
-            </span>
-          </div>
-
-          {/* Relic Toolbar inside Duel */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            {hasPerisai && (
-              <span
-                title={RELICS.perisai.desc}
-                className={`rounded-full border px-2 py-1 text-[10px] font-black ${
-                  shieldUsed
-                    ? 'border-slate-400 bg-slate-200 text-slate-500 line-through'
-                    : 'border-sky-700 bg-sky-100 text-sky-900'
-                }`}
-              >
-                🛡️ {shieldUsed ? 'Terpakai' : 'Perisai Siap'}
-              </span>
-            )}
-            {hasPeluit && turnPhase === 'answer' && !peluitUsed && (
+          {/* Question Box + Audio + Timer Gauge */}
+          <div className="mt-2.5 space-y-2 sm:mt-3 sm:space-y-2.5">
+            <div className="flex items-start justify-between gap-2.5 rounded-2xl border border-amber-300/20 bg-slate-950/45 px-3.5 py-2.5">
+              <div className="min-w-0">
+                {question.isDifficultyFlagged && (
+                  <div className="mb-1 inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 text-[10px] font-black text-amber-200">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <span>🧭 Kompas Tanya: Kata Sulit</span>
+                  </div>
+                )}
+                <h3 className="text-base font-extrabold leading-snug text-white sm:text-lg">
+                  {question.prompt}
+                </h3>
+                {question.hintWord && turnPhase !== 'grab' && (
+                  <div className="mt-0.5 font-mono-nums text-xs font-semibold text-amber-300">
+                    Petunjuk: {question.hintWord}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={handleUsePeluit}
-                className="inline-flex items-center gap-1 rounded-full border-2 border-[#0f172a] bg-emerald-400 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow hover:bg-emerald-300"
+                onClick={() => soundEngine.speakEnglish(question.audioWord)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-amber-300/40 bg-amber-400/20 px-2.5 py-1.5 text-xs font-extrabold text-amber-200 transition hover:bg-amber-400/35"
               >
-                <span>🎵 Peluit (-1 Opsi)</span>
+                <Volume2 className="h-3.5 w-3.5" />
+                <span>Dengar</span>
               </button>
-            )}
-            {hasJam && turnPhase !== 'feedback' && !jamUsed && (
-              <button
-                type="button"
-                onClick={handleUseJam}
-                className="inline-flex items-center gap-1 rounded-full border-2 border-[#0f172a] bg-amber-300 px-2.5 py-1 text-[11px] font-black text-slate-950 shadow hover:bg-amber-200"
-              >
-                <span>⏳ Bekukan Giliran</span>
-              </button>
-            )}
-            {turnFrozen && (
-              <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-[10px] font-black text-white">
-                ❄️ Waktu Dibekukan!
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 sm:flex-col sm:gap-0">
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#0f172a] text-base font-black text-white shadow-md sm:h-12 sm:w-12 sm:rounded-2xl sm:text-lg ${
-                battle.isZoneBoss || battle.isIeltsBoss ? 'bg-purple-700' : 'bg-orange-500'
-              }`}
-            >
-              👾
             </div>
-            <span className="rounded bg-[#0f172a]/85 px-1.5 py-0.5 font-mono-nums text-[9px] font-bold text-amber-300 sm:mt-1 sm:px-2 sm:text-[10px]">
-              HP {monsterHp}/{monsterMaxHp}
-            </span>
-          </div>
-        </div>
 
-        {/* Question Prompt & Audio */}
-        <div className="px-3.5 pt-2 sm:px-6 sm:pt-3.5">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              {question.isDifficultyFlagged && (
-                <div className="mb-1 inline-flex items-center gap-1 rounded-md bg-amber-200 px-2 py-0.5 text-[10px] font-black text-amber-950">
-                  <AlertTriangle className="h-3 w-3" />
-                  <span>🧭 Kompas Tanya: Kata Sulit (Sering salah)</span>
-                </div>
-              )}
-              <h3 className="text-base font-extrabold text-[#2e1806] sm:text-lg">
-                {question.prompt}
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => soundEngine.speakEnglish(question.audioWord)}
-              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#b45309]/40 bg-[#fef3c7] px-2.5 py-1.5 text-xs font-bold text-[#78350f] transition hover:bg-[#fde68a]"
-            >
-              <Volume2 className="h-3.5 w-3.5" />
-              <span>Dengar</span>
-            </button>
-          </div>
-          {question.hintWord && turnPhase !== 'grab' && (
-            <div className="mt-0.5 font-mono-nums text-xs text-[#92400e]">
-              Petunjuk: {question.hintWord}
-            </div>
-          )}
-
-          {/* Reflex / Pendekar Timer Bar */}
-          <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full border border-[#78350f] bg-[#e7d3ad] sm:mt-2.5 sm:h-3">
-            <div
-              className={`h-full transition-all duration-75 ${
+            {/* Ornate Carved RPG Timer Bar */}
+            <RpgTimerBar
+              pct={timerPct}
+              barClassName={
                 turnFrozen
-                  ? 'bg-cyan-500'
+                  ? 'bg-gradient-to-r from-cyan-400 to-sky-400'
                   : grabPct > 45
-                  ? 'bg-amber-500'
-                  : 'bg-rose-600'
-              }`}
-              style={{
-                width: `${
-                  turnPhase === 'grab'
-                    ? grabPct
-                    : turnPhase === 'answer' && diffCfg.duelAnswerSec > 0
-                    ? Math.max(0, (answerTimer / diffCfg.duelAnswerSec) * 100)
-                    : 100
-                }%`,
-              }}
-            />
-          </div>
-
-          {/* Big AMBIL! Reflex Button */}
-          {turnPhase === 'grab' ? (
-            <div className="mt-2 sm:mt-3">
-              <button
-                type="button"
-                onClick={handleGrab}
-                className="w-full rounded-xl border-2 border-[#78350f] bg-gradient-to-b from-[#fb923c] to-[#ea580c] py-2 text-sm font-black tracking-wide text-white shadow-[0_4px_0_#78350f] transition hover:brightness-105 active:translate-y-1 active:shadow-[0_2px_0_#78350f] sm:rounded-2xl sm:py-3 sm:text-lg"
-              >
-                ✋ AMBIL GILIRAN! (Spasi · {grabTimer.toFixed(1)}d)
-              </button>
-              <p className="mt-1 text-center text-[10px] font-semibold text-[#78350f] sm:mt-1.5 sm:text-[11px]">
-                Tekan cepat sebelum monster merebut giliran!
-                {hasSepatu && ' (👟 Sepatu Angin aktif +1 dtk)'}
-              </p>
-            </div>
-          ) : (
-            <div
-              className={`mt-2 rounded-xl border px-3 py-1.5 text-center text-[11px] font-extrabold sm:mt-3 sm:py-2 sm:text-xs ${
-                turnPhase === 'feedback'
-                  ? feedbackGood
-                    ? 'border-emerald-500 bg-emerald-100 text-emerald-950'
-                    : 'border-rose-500 bg-rose-100 text-rose-950'
-                  : 'border-[#d6b67c] bg-[#f5e3be]/60 text-[#78350f]'
-              }`}
-            >
-              {feedbackMsg ??
-                `Pilih jawaban tepat (1–4)${
-                  diffCfg.duelAnswerSec > 0 ? ` · Sisa ${answerTimer.toFixed(0)} dtk` : ''
-                }`}
-            </div>
-          )}
-
-          {/* 4 Answer Choices (2 columns even on landscape phones so everything stays compact!) */}
-          <div className="mt-2 grid grid-cols-1 gap-1.5 min-[480px]:grid-cols-2 sm:mt-3 sm:gap-2">
-            {question.choices.map((choice, idx) => {
-              const isPicked = selectedIdx === idx;
-              const isCorrectChoice = idx === question.correctIndex;
-              const isEliminated = eliminatedChoices.includes(idx);
-              const isLocked = lockedChoiceIdx === idx;
-              const isSlimed = slimedChoiceIdx === idx && turnPhase !== 'feedback';
-
-              let cardStyle =
-                'border-[#c4a472] bg-white text-[#2e1806] hover:border-[#ea580c] hover:bg-[#fffbeb]';
-              if (isEliminated || isLocked) {
-                cardStyle =
-                  'border-slate-300 bg-slate-200 text-slate-400 line-through cursor-not-allowed opacity-60';
-              } else if (turnPhase === 'grab') {
-                cardStyle =
-                  'border-[#d6c29f] bg-[#f5ebd6] text-[#8c6b43] opacity-70 cursor-not-allowed';
-              } else if (turnPhase === 'feedback') {
-                if (isCorrectChoice) {
-                  cardStyle = 'border-emerald-600 bg-emerald-100 text-emerald-950 font-extrabold';
-                } else if (isPicked && !feedbackGood) {
-                  cardStyle = 'border-rose-600 bg-rose-100 text-rose-950';
-                }
+                  ? 'bg-gradient-to-r from-amber-400 to-orange-500'
+                  : 'bg-gradient-to-r from-rose-500 to-red-600'
               }
+            />
 
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={turnPhase !== 'answer' || isEliminated || isLocked}
-                  onClick={() => handlePickChoice(idx)}
-                  className={`flex items-center gap-2 rounded-xl border-2 px-2.5 py-2 text-left text-xs font-bold transition sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-sm ${cardStyle}`}
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#e7d3ad] font-mono-nums text-xs font-extrabold text-[#5c340f]">
-                    {isLocked ? <Lock className="h-3.5 w-3.5" /> : idx + 1}
-                  </span>
-                  <span className="truncate">
-                    {isSlimed ? '🟢 ??? (Tertutup Lendir)' : choice}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+            {/* Big Blazing Orange AMBIL! Reflex CTA or Feedback */}
+            {turnPhase === 'grab' ? (
+              <div>
+                <RpgPillButton variant="orange" onClick={handleGrab} className="w-full text-sm sm:text-base">
+                  <span>✋ AMBIL GILIRAN! (Spasi · {grabTimer.toFixed(1)}d)</span>
+                </RpgPillButton>
+                <p className="mt-1 text-center text-[10px] font-bold text-amber-200/85 sm:text-[11px]">
+                  Tekan cepat sebelum monster merebut giliran!
+                  {hasSepatu && ' (👟 Sepatu Angin aktif +1 dtk)'}
+                </p>
+              </div>
+            ) : (
+              <div
+                className={`rounded-xl border px-3 py-1.5 text-center text-[11px] font-extrabold sm:py-2 sm:text-xs ${
+                  turnPhase === 'feedback'
+                    ? feedbackGood
+                      ? 'border-emerald-400/50 bg-emerald-950/65 text-emerald-200'
+                      : 'border-rose-400/50 bg-rose-950/65 text-rose-200'
+                    : 'border-amber-300/30 bg-slate-950/55 text-amber-200'
+                }`}
+              >
+                {feedbackMsg ??
+                  `Pilih jawaban tepat (1–4)${
+                    diffCfg.duelAnswerSec > 0 ? ` · Sisa ${answerTimer.toFixed(0)} dtk` : ''
+                  }`}
+              </div>
+            )}
 
-          {/* Bottom Bar */}
-          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pb-2.5 sm:mt-3.5 sm:pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-[#78350f]">
-              {hasPedang && (
-                <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-amber-900">
-                  <Sparkles className="h-3 w-3" />
-                  <span>{battle.isZoneBoss ? 'Pedang: 4 hit=+1 ❤️' : 'Pedang: 2 Dmg'}</span>
-                </span>
-              )}
-              <span>Streak Duel: x{duelHitStreak}</span>
+            {/* 4 Stone-Gold Answer Option Tablets */}
+            <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+              {question.choices.map((choice, idx) => {
+                const isPicked = selectedIdx === idx;
+                const isCorrectChoice = idx === question.correctIndex;
+                const isEliminated = eliminatedChoices.includes(idx);
+                const isLocked = lockedChoiceIdx === idx;
+                const isSlimed = slimedChoiceIdx === idx && turnPhase !== 'feedback';
+
+                let tone: RpgChoiceTone = 'default';
+                if (isEliminated || isLocked) {
+                  tone = 'locked';
+                } else if (turnPhase === 'grab') {
+                  tone = 'muted';
+                } else if (turnPhase === 'feedback') {
+                  if (isCorrectChoice) tone = 'correct';
+                  else if (isPicked && !feedbackGood) tone = 'wrong';
+                }
+
+                return (
+                  <RpgChoiceCard
+                    key={idx}
+                    tone={tone}
+                    disabled={turnPhase !== 'answer' || isEliminated || isLocked}
+                    onClick={() => handlePickChoice(idx)}
+                    className="flex items-center gap-2.5 px-2 py-1.5 text-xs sm:text-sm"
+                  >
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border font-mono-nums text-xs font-black ${
+                        tone === 'correct'
+                          ? 'border-emerald-300 bg-emerald-600 text-white'
+                          : tone === 'wrong'
+                          ? 'border-rose-300 bg-rose-600 text-white'
+                          : 'border-amber-300/50 bg-amber-500/20 text-amber-200'
+                      }`}
+                    >
+                      {isLocked ? <Lock className="h-3.5 w-3.5" /> : idx + 1}
+                    </span>
+                    <span className="truncate font-extrabold">
+                      {isSlimed ? '🟢 ??? (Tertutup Lendir)' : choice}
+                    </span>
+                  </RpgChoiceCard>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={() => onBattleEnd('fled', battle)}
-              className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#991b1b] bg-[#ef4444] px-3.5 py-1.5 text-xs font-extrabold text-white shadow transition hover:bg-[#dc2626]"
-            >
-              <Footprints className="h-3.5 w-3.5" />
-              <span>Kabur (-1 ❤️)</span>
-            </button>
+
+            {/* Bottom Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              <div className="flex items-center gap-2 text-[11px] font-extrabold text-amber-200">
+                {hasPedang && (
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300/35 bg-amber-500/20 px-2 py-0.5 text-amber-200">
+                    <Sparkles className="h-3 w-3" />
+                    <span>{battle.isZoneBoss ? 'Pedang: 4 hit=+1 ❤️' : 'Pedang: 2 Dmg'}</span>
+                  </span>
+                )}
+                <span>Streak Duel: x{duelHitStreak}</span>
+              </div>
+
+              <RpgPillButton
+                variant="red"
+                size="sm"
+                onClick={() => onBattleEnd('fled', battle)}
+              >
+                <Footprints className="h-3.5 w-3.5 shrink-0" />
+                <span>Kabur (-1 ❤️)</span>
+              </RpgPillButton>
+            </div>
           </div>
-        </div>
+        </RpgBoardPanel>
       </div>
     </div>
   );

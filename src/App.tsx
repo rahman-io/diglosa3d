@@ -625,8 +625,6 @@ function DiglosaRpgApp() {
         wordProgress={hud.wordProgress}
         liberatedZones={hud.liberatedZones}
         areaDoorsCleared={hud.areaDoorsCleared}
-        crowns={hud.crowns}
-        storyLocked={hud.settings.storyLocked}
         onClose={() => {
           setDialogueNpcId(null);
           engineRef.current?.setPhase('playing');
@@ -636,15 +634,6 @@ function DiglosaRpgApp() {
         onEnterDungeon={(zoneId, isMixedChallenge) => {
           setDialogueNpcId(null);
           engineRef.current?.enterZoneDungeon(zoneId, isMixedChallenge);
-        }}
-        onEnterIeltsPortal={() => {
-          setDialogueNpcId(null);
-          engineRef.current?.startIeltsTrial();
-        }}
-        onOpenQuestsModal={() => {
-          setDialogueNpcId(null);
-          engineRef.current?.setPhase('playing');
-          setSideTab('quests');
         }}
       />
 

@@ -992,8 +992,67 @@ export function getZoneForPosition(x: number, z: number): ZoneId {
   return 'gerbang_kota';
 }
 
-// 9. 3D Mission Doors inside Zone Dungeons
-export function createDungeonDoorRig(def: DoorDef, palette: MaterialPalette): DungeonDoorRig {
+function createDoorSignSprite(
+  def: DoorDef,
+  disposables: Array<{ dispose: () => void }>,
+): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+
+  // Dark carved RPG wooden plaque
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  ctx.beginPath();
+  ctx.roundRect(10, 10, 492, 108, 22);
+  ctx.fill();
+
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = def.index === 4 ? '#f43f5e' : '#f59e0b';
+  ctx.beginPath();
+  ctx.roundRect(10, 10, 492, 108, 22);
+  ctx.stroke();
+
+  // Inner subtle highlight border
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(253, 230, 138, 0.45)';
+  ctx.beginPath();
+  ctx.roundRect(18, 18, 476, 92, 16);
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = 'bold 34px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = '#fef3c7';
+  ctx.fillText(`${def.index + 1}. ${def.name}`, 256, 48);
+
+  ctx.font = 'bold 21px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillText(def.modeLabel, 256, 88);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false,
+  });
+  disposables.push(tex, mat);
+
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(4.1, 1.02, 1);
+  // Ignore raycasts on text billboard so clicks/camera pass cleanly to solid meshes
+  sprite.raycast = () => {};
+  return sprite;
+}
+
+// 9. Distinct 3D Mission Landmarks inside Zone Dungeons (Pool, Tunnel, Echo Shrine, Bridge, Boss Gate)
+export function createDungeonDoorRig(
+  def: DoorDef,
+  palette: MaterialPalette,
+  disposables: Array<{ dispose: () => void }> = [],
+): DungeonDoorRig {
   const group = new THREE.Group();
   group.position.set(def.x, 0, def.z);
   group.userData.doorIndex = def.index;
@@ -1003,7 +1062,7 @@ export function createDungeonDoorRig(def: DoorDef, palette: MaterialPalette): Du
   const frameMat = new THREE.MeshStandardMaterial({
     color: 0xf59e0b,
     roughness: 0.45,
-    metalness: 0.2,
+    metalness: 0.25,
   });
   const orbMat = new THREE.MeshStandardMaterial({
     color: 0xfacc15,
@@ -1011,21 +1070,266 @@ export function createDungeonDoorRig(def: DoorDef, palette: MaterialPalette): Du
     emissiveIntensity: 1.2,
     roughness: 0.2,
   });
+  disposables.push(frameMat, orbMat);
 
-  const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.3, 0.22, 16), palette.getMat(0x334155, 'matte'));
-  pad.position.y = 0.11;
-  const pL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 3.4, 0.55), frameMat);
-  pL.position.set(-1.35, 1.7, 0);
-  const pR = new THREE.Mesh(new THREE.BoxGeometry(0.55, 3.4, 0.55), frameMat);
-  pR.position.set(1.35, 1.7, 0);
-  const top = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.65, 0.7), frameMat);
-  top.position.set(0, 3.6, 0);
-  const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(2.1, 3.1, 0.2), palette.getMat(0x1e293b, 'gloss'));
-  doorPanel.position.set(0, 1.65, 0);
+  const stoneDark = palette.getMat(0x334155, 'matte');
+  const stoneMid = palette.getMat(0x475569, 'matte');
+  const stoneLight = palette.getMat(0x64748b, 'matte');
+  const woodDark = palette.getMat(0x78350f, 'matte');
+  const woodWarm = palette.getMat(0xb45309, 'matte');
+
+  let orbBaseY = 3.6;
+
+  if (def.mode === 'cards') {
+    // Landmark 1: Luminous Memory Pool / Sacred Well (Kolam Ingatan / Sumur Tua / Genangan)
+    const outerRim = new THREE.Mesh(new THREE.CylinderGeometry(2.35, 2.55, 0.48, 8), stoneMid);
+    outerRim.position.y = 0.24;
+    outerRim.castShadow = true;
+    outerRim.receiveShadow = true;
+
+    const stoneCurb = new THREE.Mesh(new THREE.TorusGeometry(2.05, 0.24, 6, 8), frameMat);
+    stoneCurb.rotation.x = Math.PI / 2;
+    stoneCurb.rotation.z = Math.PI / 8;
+    stoneCurb.position.y = 0.52;
+
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.72,
+      roughness: 0.15,
+      metalness: 0.15,
+    });
+    disposables.push(waterMat);
+    const waterPool = new THREE.Mesh(new THREE.CylinderGeometry(1.88, 1.88, 0.14, 16), waterMat);
+    waterPool.position.y = 0.46;
+
+    // Floating rune lilypads/memory tiles inside the pool
+    const runeMat = palette.getMat(0xa7f3d0, 'emissive');
+    [
+      [-0.7, 0.56, 0.4],
+      [0.65, 0.56, -0.5],
+      [0.15, 0.56, 0.75],
+    ].forEach(([rx, ry, rz]) => {
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.45), runeMat);
+      tile.position.set(rx, ry, rz);
+      tile.rotation.y = rx;
+      group.add(tile);
+    });
+
+    // Four carved corner lantern posts supporting a well roof canopy
+    const postOffsets: Array<[number, number]> = [
+      [-1.55, -1.55],
+      [1.55, -1.55],
+      [-1.55, 1.55],
+      [1.55, 1.55],
+    ];
+    postOffsets.forEach(([px, pz]) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.28, 2.25, 0.28), woodDark);
+      post.position.set(px, 1.45, pz);
+      post.castShadow = true;
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 0.4), frameMat);
+      cap.position.set(px, 2.55, pz);
+      group.add(post, cap);
+    });
+
+    const canopyFrame = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.22, 3.4), woodWarm);
+    canopyFrame.position.y = 2.68;
+    const canopyPeak = new THREE.Mesh(new THREE.ConeGeometry(2.15, 0.85, 4), frameMat);
+    canopyPeak.position.y = 3.18;
+    canopyPeak.rotation.y = Math.PI / 4;
+
+    group.add(outerRim, stoneCurb, waterPool, canopyFrame, canopyPeak);
+    orbBaseY = 4.15;
+  } else if (def.mode === 'duel') {
+    // Landmark 2: Vaulted Lightning Duel Corridor / Tunnel (Lorong Kilat / Jalur / Jalan)
+    const floorRunner = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.18, 3.8), stoneDark);
+    floorRunner.position.y = 0.09;
+    floorRunner.receiveShadow = true;
+
+    const duelCarpet = new THREE.Mesh(
+      new THREE.BoxGeometry(1.7, 0.06, 3.6),
+      palette.getMat(0xbe123c, 'matte'),
+    );
+    duelCarpet.position.y = 0.2;
+
+    // 3 sequential archways forming a genuine 3D walk-in corridor!
+    [-1.25, 0, 1.25].forEach((az) => {
+      const archL = new THREE.Mesh(new THREE.BoxGeometry(0.46, 3.0, 0.5), stoneMid);
+      archL.position.set(-1.32, 1.5, az);
+      archL.castShadow = true;
+      const archR = new THREE.Mesh(new THREE.BoxGeometry(0.46, 3.0, 0.5), stoneMid);
+      archR.position.set(1.32, 1.5, az);
+      archR.castShadow = true;
+      const archTop = new THREE.Mesh(new THREE.BoxGeometry(3.25, 0.55, 0.56), frameMat);
+      archTop.position.set(0, 3.15, az);
+      group.add(archL, archR, archTop);
+    });
+
+    // Corridor side beams connecting the 3 arches along top edges
+    const sideBeamL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.35, 3.3), woodWarm);
+    sideBeamL.position.set(-1.32, 2.85, 0);
+    const sideBeamR = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.35, 3.3), woodWarm);
+    sideBeamR.position.set(1.32, 2.85, 0);
+
+    // Twin crackling lightning/duel crystals flanking the corridor mouth
+    [-1.78, 1.78].forEach((cx, i) => {
+      const crystal = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.55, 5), orbMat);
+      crystal.position.set(cx, 1.1, 1.45);
+      crystal.rotation.z = i === 0 ? 0.22 : -0.22;
+      group.add(crystal);
+    });
+
+    group.add(floorRunner, duelCarpet, sideBeamL, sideBeamR);
+    orbBaseY = 4.1;
+  } else if (def.mode === 'listen') {
+    // Landmark 3: Acoustic Echo Shrine & Golden Resonance Bell (Lorong Gema / Ruang Lonceng)
+    const stage = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.28, 12), stoneDark);
+    stage.position.y = 0.14;
+    stage.receiveShadow = true;
+
+    // Semicircular acoustic echo shell wall behind the bell
+    const shellOffsets: Array<[number, number, number]> = [
+      [-1.45, -0.55, 0.45],
+      [-0.78, -1.22, 0.22],
+      [0, -1.42, 0],
+      [0.78, -1.22, -0.22],
+      [1.45, -0.55, -0.45],
+    ];
+    shellOffsets.forEach(([sx, sz, rot]) => {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.3, 0.45), stoneMid);
+      rib.position.set(sx, 1.65, sz);
+      rib.rotation.y = rot;
+      rib.castShadow = true;
+      group.add(rib);
+    });
+
+    // Timber & gold bell-hanging frame
+    const bellBeam = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.38, 0.55), frameMat);
+    bellBeam.position.set(0, 3.35, -0.3);
+    const bellBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.68, 0.95, 12),
+      palette.getMat(0xfbbf24, 'metal'),
+    );
+    bellBody.position.set(0, 2.55, -0.2);
+    const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), orbMat);
+    clapper.position.set(0, 2.0, -0.2);
+
+    // Concentric glowing sound-wave echo rings in front of the bell
+    const waveMat = palette.getMat(0x22d3ee, 'emissive');
+    const waveInner = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.08, 8, 24), waveMat);
+    waveInner.position.set(0, 2.15, 0.45);
+    const waveOuter = new THREE.Mesh(new THREE.TorusGeometry(1.42, 0.08, 8, 28), waveMat);
+    waveOuter.position.set(0, 2.15, 0.72);
+
+    group.add(stage, bellBeam, bellBody, clapper, waveInner, waveOuter);
+    orbBaseY = 4.25;
+  } else if (def.mode === 'type') {
+    // Landmark 4: Arched Timber-and-Stone Bridge over Underground Stream (Jembatan Huruf / Parit)
+    const streamMat = new THREE.MeshStandardMaterial({
+      color: 0x0369a1,
+      emissive: 0x0ea5e9,
+      emissiveIntensity: 0.75,
+      roughness: 0.18,
+    });
+    disposables.push(streamMat);
+
+    // Shimmering underground stream bed beneath the bridge
+    const streamBed = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.1, 2.3), streamMat);
+    streamBed.position.set(0, 0.05, 0);
+
+    // Mossy stone riverbanks flanking the water
+    const bankN = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.28, 0.45), stoneLight);
+    bankN.position.set(0, 0.14, -1.32);
+    const bankS = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.28, 0.45), stoneLight);
+    bankS.position.set(0, 0.14, 1.32);
+
+    // 3-step arched wooden deck spanning across the stream (walk-up ramp -> crest -> down ramp)
+    const rampFront = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.24, 1.05), woodWarm);
+    rampFront.position.set(0, 0.35, 1.05);
+    rampFront.rotation.x = 0.24;
+    const bridgeCrest = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.26, 1.35), woodWarm);
+    bridgeCrest.position.set(0, 0.64, 0);
+    bridgeCrest.castShadow = true;
+    const rampBack = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.24, 1.05), woodWarm);
+    rampBack.position.set(0, 0.35, -1.05);
+    rampBack.rotation.x = -0.24;
+
+    // Glowing letter-rune tiles inlaid on the bridge crest
+    [-0.65, 0, 0.65].forEach((rx) => {
+      const rune = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), orbMat);
+      rune.position.set(rx, 0.8, 0);
+      group.add(rune);
+    });
+
+    // Bridge handrail posts & side railings
+    [-1.15, 1.15].forEach((px) => {
+      [-1.15, 0, 1.15].forEach((pz) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.45, 0.22), frameMat);
+        post.position.set(px, pz === 0 ? 1.3 : 1.0, pz);
+        group.add(post);
+      });
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 2.75), woodDark);
+      rail.position.set(px, 1.72, 0);
+      group.add(rail);
+    });
+
+    // Small arch span above center of bridge
+    const spanTop = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.32, 0.38), frameMat);
+    spanTop.position.set(0, 2.45, 0);
+
+    group.add(streamBed, bankN, bankS, rampFront, bridgeCrest, rampBack, spanTop);
+    orbBaseY = 3.45;
+  } else {
+    // Landmark 5 (Boss Gate): Grand Ancient Double Seal Portal (Pintu Teka-Teki -> Bos)
+    const dais = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.34, 2.5), stoneDark);
+    dais.position.y = 0.17;
+    dais.receiveShadow = true;
+
+    const pL = new THREE.Mesh(new THREE.BoxGeometry(0.85, 4.1, 0.85), stoneMid);
+    pL.position.set(-1.6, 2.15, 0);
+    pL.castShadow = true;
+    const pR = new THREE.Mesh(new THREE.BoxGeometry(0.85, 4.1, 0.85), stoneMid);
+    pR.position.set(1.6, 2.15, 0);
+    pR.castShadow = true;
+
+    const trimL = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.4, 0.95), frameMat);
+    trimL.position.set(-1.6, 4.25, 0);
+    const trimR = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.4, 0.95), frameMat);
+    trimR.position.set(1.6, 4.25, 0);
+
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.72, 1.05), frameMat);
+    lintel.position.set(0, 4.45, 0);
+
+    // Double paneled doors with central boss seal ring
+    const doorLeft = new THREE.Mesh(new THREE.BoxGeometry(1.12, 3.6, 0.24), woodDark);
+    doorLeft.position.set(-0.58, 2.1, 0);
+    const doorRight = new THREE.Mesh(new THREE.BoxGeometry(1.12, 3.6, 0.24), woodDark);
+    doorRight.position.set(0.58, 2.1, 0);
+
+    const lockRing = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.12, 8, 20), orbMat);
+    lockRing.position.set(0, 2.15, 0.18);
+
+    // Twin flaming corner braziers at door steps
+    [-2.05, 2.05].forEach((bx) => {
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.22, 0.55, 8), stoneMid);
+      bowl.position.set(bx, 0.55, 0.9);
+      const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), orbMat);
+      flame.position.set(bx, 1.0, 0.9);
+      group.add(bowl, flame);
+    });
+
+    group.add(dais, pL, pR, trimL, trimR, lintel, doorLeft, doorRight, lockRing);
+    orbBaseY = 5.4;
+  }
+
   const orbMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), orbMat);
-  orbMesh.position.set(0, 4.4, 0);
+  orbMesh.position.set(0, orbBaseY, 0);
+  orbMesh.userData.baseY = orbBaseY;
 
-  group.add(pad, pL, pR, top, doorPanel, orbMesh);
+  const signSprite = createDoorSignSprite(def, disposables);
+  signSprite.position.set(0, orbBaseY + 1.05, 0);
+
+  group.add(orbMesh, signSprite);
   return { index: def.index, def, group, orbMesh, frameMat, orbMat };
 }
 
@@ -1846,12 +2150,12 @@ export function createDungeonEnvironment(
     animatables.push(gearGroup);
   }
 
-  // Add the 5 Zone Mission Doors!
+  // Add the 5 Zone Mission Landmarks (Pool, Corridor Tunnel, Echo Shrine, Bridge, Boss Gate)!
   const doorDefs = ZONE_DOORS[zoneId];
   const doors: DungeonDoorRig[] = doorDefs.map((def) => {
-    const dRig = createDungeonDoorRig(def, palette);
+    const dRig = createDungeonDoorRig(def, palette, disposables);
     dRig.orbMesh.userData.animKind = 'bob';
-    dRig.orbMesh.userData.baseY = 4.4;
+    dRig.orbMesh.userData.baseY = dRig.orbMesh.userData.baseY ?? 4.0;
     dRig.orbMesh.userData.phase = def.index * 0.9;
     animatables.push(dRig.orbMesh);
     group.add(dRig.group);
