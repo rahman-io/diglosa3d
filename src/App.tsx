@@ -132,6 +132,11 @@ const INITIAL_HUD: RpgHudSnapshot = {
   nearCraftingTable: false,
   caveBlocksMined: 0,
   targetedBlock: null,
+  isAiming: false,
+  hitMarkerKind: 'none',
+  crosshairOnEnemy: false,
+  crosshairSpread: 0,
+  pointerLocked: false,
 };
 
 function DiglosaRpgApp() {
@@ -539,7 +544,10 @@ function DiglosaRpgApp() {
           onOpenOptions={() => setSideTab('options')}
           onOpenLeaderboard={() => setLeaderboardOpen(true)}
           onPrimaryAction={() => engineRef.current?.triggerPrimaryAction()}
-          onFireWeapon={() => engineRef.current?.fireActiveWeapon()}
+          onFireWeapon={() => engineRef.current?.fireActiveWeapon(false)}
+          onSetFireHeld={(held) => engineRef.current?.setFireHeld(held)}
+          onToggleAim={() => engineRef.current?.toggleAimMode()}
+          onTogglePointerLock={() => engineRef.current?.togglePointerLock()}
           onJump={() => engineRef.current?.jumpHero()}
           onOpenCrafting={() => engineRef.current?.openCraftingTable()}
           onVirtualMove={(vx, vz) => engineRef.current?.setVirtualMove(vx, vz)}
@@ -606,6 +614,8 @@ function DiglosaRpgApp() {
         battle={activeBattle}
         playerHp={hud.hp}
         playerMaxHp={hud.maxHp}
+        activeWeapon={hud.activeWeapon}
+        hasWeapon={hud.ownedWeapons.length > 0}
         difficulty={hud.settings.difficulty}
         ownedRelics={hud.ownedRelics}
         wordProgress={hud.wordProgress}

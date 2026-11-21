@@ -21,6 +21,7 @@ import {
   DifficultyMode,
   QuizQuestion,
   RelicId,
+  WeaponId,
   WordProgress,
 } from '../types/game';
 import {
@@ -60,6 +61,8 @@ interface BattleQuizModalProps {
   battle: BattleContext | null;
   playerHp: number;
   playerMaxHp: number;
+  activeWeapon: WeaponId;
+  hasWeapon: boolean;
   difficulty: DifficultyMode;
   ownedRelics: RelicId[];
   wordProgress: Record<string, WordProgress>;
@@ -81,6 +84,8 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
   battle,
   playerHp,
   playerMaxHp,
+  activeWeapon,
+  hasWeapon,
   difficulty,
   ownedRelics,
   wordProgress,
@@ -672,6 +677,8 @@ export const BattleQuizModal: React.FC<BattleQuizModalProps> = ({
             <BattleArenaCanvas
               monsterType={battle.monsterType}
               isBoss={Boolean(battle.isZoneBoss || battle.isIeltsBoss)}
+              activeWeapon={activeWeapon}
+              hasWeapon={hasWeapon}
               eventKind={animEvent}
               eventTick={animTick}
             />

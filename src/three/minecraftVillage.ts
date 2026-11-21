@@ -17,13 +17,32 @@ export interface VillageInteractable {
   mesh: THREE.Object3D;
 }
 
+function computeVillageBlink(elapsed: number, phase = 0): number {
+  const period = 3.7 + (phase % 1.4);
+  const t = (elapsed + phase * 1.7) % period;
+  if (t < 0.14) {
+    const p = t / 0.14;
+    return Math.max(0.08, 1 - Math.sin(p * Math.PI) * 0.92);
+  }
+  if (Math.floor((elapsed + phase) / period) % 4 === 0 && t >= 0.24 && t < 0.36) {
+    const p = (t - 0.24) / 0.12;
+    return Math.max(0.08, 1 - Math.sin(p * Math.PI) * 0.92);
+  }
+  return 1;
+}
+
 interface VillagerActor {
   root: THREE.Group;
+  bodyPivot: THREE.Group;
   body: THREE.Group;
-  head: THREE.Mesh;
+  headGroup: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   leftLeg: THREE.Group;
   rightLeg: THREE.Group;
-  arms: THREE.Group;
+  leftArm: THREE.Group;
+  rightArm: THREE.Group;
+  style: 'farmer' | 'librarian' | 'cleric' | 'fletcher' | 'shepherd' | 'trader';
   waypoints: Array<[number, number]>;
   wpIdx: number;
   x: number;
@@ -32,10 +51,16 @@ interface VillagerActor {
   pauseTimer: number;
   speed: number;
   walkPhase: number;
+  stuckTimer: number;
+  avoidSign: number;
 }
 
 interface GolemActor {
   root: THREE.Group;
+  bodyPivot: THREE.Group;
+  headGroup: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   leftLeg: THREE.Group;
   rightLeg: THREE.Group;
   leftArm: THREE.Group;
@@ -48,11 +73,15 @@ interface GolemActor {
   pauseTimer: number;
   walkPhase: number;
   holdsFlower: boolean;
+  stuckTimer: number;
+  avoidSign: number;
 }
 
 interface LlamaActor {
   root: THREE.Group;
   headPivot: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   legs: THREE.Mesh[];
   baseX: number;
   baseZ: number;
@@ -75,8 +104,13 @@ interface BeeActor {
 
 interface PillagerActor {
   root: THREE.Group;
+  bodyPivot: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   leftLeg: THREE.Mesh;
   rightLeg: THREE.Mesh;
+  leftArm: THREE.Group;
+  rightArm: THREE.Group;
   centerX: number;
   baseY: number;
   centerZ: number;
@@ -97,6 +131,8 @@ export interface MinecraftVillageRig {
   critters: Array<{
     root: THREE.Group;
     head: THREE.Group;
+    leftEye: THREE.Mesh;
+    rightEye: THREE.Mesh;
     baseX: number;
     baseZ: number;
     baseYaw: number;
@@ -104,6 +140,13 @@ export interface MinecraftVillageRig {
   }>;
   torchesFlame: THREE.Object3D[];
   smokePuffs: Array<{ mesh: THREE.Mesh; baseX: number; baseY: number; baseZ: number; phase: number }>;
+  windUniforms: { uTime: { value: number } };
+  outpostBanner?: THREE.Group;
+  breezeMotes?: {
+    mesh: THREE.InstancedMesh;
+    seeds: Float32Array;
+    count: number;
+  };
   disposables: Array<{ dispose: () => void }>;
 }
 
@@ -204,6 +247,7 @@ export function createMinecraftHouse(
     ember.position.set(tx, 1.48, halfD + 0.48);
     const flame = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.14), flameMat);
     flame.position.set(tx, 1.62, halfD + 0.48);
+    flame.userData.isFlame = true;
     group.add(cob, stick, ember, flame);
   });
 
@@ -360,6 +404,7 @@ function createMarketStall(
     stick.position.set(tx, 1.22, 0.5);
     const tip = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.18, 0.15), flame);
     tip.position.set(tx, 1.5, 0.5);
+    tip.userData.isFlame = true;
     g.add(stick, tip);
   });
 
@@ -393,8 +438,10 @@ function createVillagerMesh(
   style: 'farmer' | 'librarian' | 'cleric' | 'fletcher' | 'shepherd' | 'trader',
 ): VillagerActor {
   const root = new THREE.Group();
+  const bodyPivot = new THREE.Group();
   const body = new THREE.Group();
-  root.add(body);
+  bodyPivot.add(body);
+  root.add(bodyPivot);
 
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.7), palette.contactShadowMat);
   shadow.rotation.x = -Math.PI / 2;
@@ -421,83 +468,113 @@ function createVillagerMesh(
   const makeLeg = (lx: number): THREE.Group => {
     const leg = new THREE.Group();
     leg.position.set(lx, 0.9, 0);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.85, 0.34), darkMat);
-    m.position.y = -0.45;
-    m.castShadow = true;
-    leg.add(m);
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.56, 0.34), darkMat);
+    upper.position.y = -0.28;
+    upper.castShadow = true;
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.32, 0.42), palette.getMat(0x451a03, 'matte'));
+    shoe.position.set(0, -0.74, 0.04);
+    shoe.castShadow = true;
+    leg.add(upper, shoe);
     return leg;
   };
-  const leftLeg = makeLeg(-0.2);
-  const rightLeg = makeLeg(0.2);
+  const leftLeg = makeLeg(-0.21);
+  const rightLeg = makeLeg(0.21);
   body.add(leftLeg, rightLeg);
 
-  const skirt = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.85, 0.56), robeMat);
-  skirt.position.y = 0.95;
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.62, 0.56), robeMat);
+  skirt.position.y = 0.78;
   skirt.castShadow = true;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.9, 0.58), robeMat);
-  torso.position.y = 1.68;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.94, 0.58), robeMat);
+  torso.position.y = 1.56;
   torso.castShadow = true;
   body.add(skirt, torso);
 
   if (style === 'trader') {
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.18, 0.6), palette.getMat(0xfacc15, 'metal'));
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.6), palette.getMat(0xfacc15, 'metal'));
     trim.position.y = 1.45;
     body.add(trim);
   } else if (style === 'farmer') {
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(0.76, 1.0, 0.1), palette.getMat(0xb45309, 'matte'));
-    apron.position.set(0, 1.2, 0.31);
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.96, 0.1), palette.getMat(0xb45309, 'matte'));
+    apron.position.set(0, 1.24, 0.31);
     body.add(apron);
   }
 
-  // Folded Minecraft Villager arms (or carrying bread basket if farmer/librarian)
-  const arms = new THREE.Group();
-  arms.position.set(0, 1.85, 0.18);
-  const armBar = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.34, 0.34), robeMat);
-  armBar.position.set(0, -0.18, 0.16);
-  armBar.castShadow = true;
-  arms.add(armBar);
+  // Full Jointed Arms + Forearms + Visible Hands (no cut-off stubby bar!)
+  const makeArm = (ax: number): THREE.Group => {
+    const arm = new THREE.Group();
+    arm.position.set(ax, 1.94, 0);
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 0.32), robeMat);
+    sleeve.position.y = -0.18;
+    sleeve.castShadow = true;
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.3, 0.28), robeMat);
+    forearm.position.y = -0.46;
+    forearm.castShadow = true;
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.26), skinMat);
+    hand.position.y = -0.68;
+    hand.castShadow = true;
+    arm.add(sleeve, forearm, hand);
+    return arm;
+  };
+  const leftArm = makeArm(-0.59);
+  const rightArm = makeArm(0.59);
   if (style === 'farmer') {
-    const basket = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.42, 0.48), palette.getPixelMat('hay'));
-    basket.position.set(0, -0.05, 0.48);
-    arms.add(basket);
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.38, 0.46), palette.getPixelMat('hay'));
+    basket.position.set(0, 1.42, 0.56);
+    basket.castShadow = true;
+    body.add(basket);
+    leftArm.rotation.set(-0.82, 0, -0.2);
+    rightArm.rotation.set(-0.82, 0, 0.2);
+  } else if (style === 'trader') {
+    const satchel = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.34, 0.36), palette.getMat(0x92400e, 'matte'));
+    satchel.position.set(0, -0.64, 0.14);
+    rightArm.add(satchel);
   }
-  body.add(arms);
+  body.add(leftArm, rightArm);
 
-  // Classic Villager Head + Unibrow + Nose
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.92, 0.72), skinMat);
-  head.position.y = 2.58;
+  // Classic Villager Head Group pivoted cleanly at neck + Unibrow + Nose
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 2.08, 0);
+  body.add(headGroup);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.88, 0.74), skinMat);
+  head.position.y = 0.46;
   head.castShadow = true;
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.34, 0.24), palette.getMat(0xd69a6c, 'matte'));
-  nose.position.set(0, 2.38, 0.44);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.32, 0.24), palette.getMat(0xd69a6c, 'matte'));
+  nose.position.set(0, 0.28, 0.44);
   const brow = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.09, 0.06), darkMat);
-  brow.position.set(0, 2.66, 0.38);
+  brow.position.set(0, 0.56, 0.38);
   const eL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.06), eyeMat);
-  eL.position.set(-0.18, 2.56, 0.37);
+  eL.position.set(-0.18, 0.46, 0.38);
   const eR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.06), eyeMat);
-  eR.position.set(0.18, 2.56, 0.37);
-  body.add(head, nose, brow, eL, eR);
+  eR.position.set(0.18, 0.46, 0.38);
+  headGroup.add(head, nose, brow, eL, eR);
 
   if (style === 'farmer') {
     const brim = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.1, 1.18), palette.getPixelMat('hay'));
-    brim.position.y = 2.95;
+    brim.position.y = 0.84;
     const crown = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.28, 0.76), palette.getPixelMat('hay'));
-    crown.position.y = 3.1;
-    body.add(brim, crown);
+    crown.position.y = 1.0;
+    headGroup.add(brim, crown);
   } else if (style === 'trader') {
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.42, 0.82), palette.getMat(0x1e40af, 'matte'));
-    hood.position.y = 2.95;
-    const goldBand = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.12, 0.84), palette.getMat(0xfacc15, 'metal'));
-    goldBand.position.y = 2.82;
-    body.add(hood, goldBand);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.42, 0.84), palette.getMat(0x1e40af, 'matte'));
+    hood.position.y = 0.84;
+    const goldBand = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.12, 0.86), palette.getMat(0xfacc15, 'metal'));
+    goldBand.position.y = 0.7;
+    headGroup.add(hood, goldBand);
   }
 
   return {
     root,
+    bodyPivot,
     body,
-    head,
+    headGroup,
+    leftEye: eL,
+    rightEye: eR,
     leftLeg,
     rightLeg,
-    arms,
+    leftArm,
+    rightArm,
+    style,
     waypoints: [],
     wpIdx: 0,
     x: 0,
@@ -506,11 +583,16 @@ function createVillagerMesh(
     pauseTimer: 0,
     speed: 2.1,
     walkPhase: Math.random() * Math.PI * 2,
+    stuckTimer: 0,
+    avoidSign: Math.random() < 0.5 ? 1 : -1,
   };
 }
 
 function createIronGolemMesh(palette: MaterialPalette, holdsFlower: boolean): GolemActor {
   const root = new THREE.Group();
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.8), palette.contactShadowMat);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.03;
@@ -532,7 +614,7 @@ function createIronGolemMesh(palette: MaterialPalette, holdsFlower: boolean): Go
   };
   const leftLeg = makeLeg(-0.48);
   const rightLeg = makeLeg(0.48);
-  root.add(leftLeg, rightLeg);
+  bodyPivot.add(leftLeg, rightLeg);
 
   const waist = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.72), darkMat);
   waist.position.y = 1.45;
@@ -541,18 +623,22 @@ function createIronGolemMesh(palette: MaterialPalette, holdsFlower: boolean): Go
   chest.castShadow = true;
   const vine = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.85, 1.02), mossMat);
   vine.position.set(-0.35, 2.18, 0);
-  root.add(waist, chest, vine);
+  bodyPivot.add(waist, chest, vine);
+
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 2.9, 0.08);
+  bodyPivot.add(headGroup);
 
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.92, 0.82), ironMat);
-  head.position.set(0, 3.25, 0.08);
+  head.position.y = 0.36;
   head.castShadow = true;
   const nose = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.36, 0.24), palette.getMat(0xa8a29e, 'matte'));
-  nose.position.set(0, 3.05, 0.54);
+  nose.position.set(0, 0.16, 0.46);
   const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.08), eyeGlow);
-  eyeL.position.set(-0.2, 3.28, 0.5);
+  eyeL.position.set(-0.2, 0.39, 0.42);
   const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.08), eyeGlow);
-  eyeR.position.set(0.2, 3.28, 0.5);
-  root.add(head, nose, eyeL, eyeR);
+  eyeR.position.set(0.2, 0.39, 0.42);
+  headGroup.add(head, nose, eyeL, eyeR);
 
   const makeArm = (ax: number, flower: boolean): THREE.Group => {
     const arm = new THREE.Group();
@@ -574,10 +660,14 @@ function createIronGolemMesh(palette: MaterialPalette, holdsFlower: boolean): Go
   };
   const leftArm = makeArm(-1.25, holdsFlower);
   const rightArm = makeArm(1.25, false);
-  root.add(leftArm, rightArm);
+  bodyPivot.add(leftArm, rightArm);
 
   return {
     root,
+    bodyPivot,
+    headGroup,
+    leftEye: eyeL,
+    rightEye: eyeR,
     leftLeg,
     rightLeg,
     leftArm,
@@ -590,6 +680,8 @@ function createIronGolemMesh(palette: MaterialPalette, holdsFlower: boolean): Go
     pauseTimer: 0,
     walkPhase: 0,
     holdsFlower,
+    stuckTimer: 0,
+    avoidSign: 1,
   };
 }
 
@@ -653,7 +745,17 @@ function createLlamaMesh(
   headPivot.add(neck, snout, earL, earR, eyeL, eyeR);
   root.add(headPivot);
 
-  return { root, headPivot, legs, baseX: x, baseZ: z, baseYaw: yaw, phase: Math.random() * 6 };
+  return {
+    root,
+    headPivot,
+    leftEye: eyeL,
+    rightEye: eyeR,
+    legs,
+    baseX: x,
+    baseZ: z,
+    baseYaw: yaw,
+    phase: Math.random() * 6,
+  };
 }
 
 function createBeeMesh(palette: MaterialPalette): {
@@ -682,13 +784,22 @@ function createBeeMesh(palette: MaterialPalette): {
 
 function createPillagerMesh(palette: MaterialPalette): {
   root: THREE.Group;
+  bodyPivot: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   leftLeg: THREE.Mesh;
   rightLeg: THREE.Mesh;
+  leftArm: THREE.Group;
+  rightArm: THREE.Group;
 } {
   const root = new THREE.Group();
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
   const coat = palette.getMat(0x334155, 'matte');
   const skin = palette.getMat(0x94a3b8, 'matte');
   const dark = palette.getMat(0x0f172a, 'matte');
+  const eyeMat = palette.getMat(0x22d3ee, 'emissive');
 
   const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.85, 0.32), dark);
   leftLeg.position.set(-0.2, 0.425, 0);
@@ -698,12 +809,36 @@ function createPillagerMesh(palette: MaterialPalette): {
   torso.position.y = 1.42;
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.88, 0.72), skin);
   head.position.y = 2.42;
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.08, 0.06), dark);
+  brow.position.set(0, 2.52, 0.37);
+  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.1, 0.06), eyeMat);
+  leftEye.position.set(-0.17, 2.42, 0.37);
+  const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.1, 0.06), eyeMat);
+  rightEye.position.set(0.17, 2.42, 0.37);
   const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.32, 0.22), skin);
   nose.position.set(0, 2.24, 0.42);
-  const crossbow = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.14, 0.45), palette.getMat(0x78350f, 'matte'));
-  crossbow.position.set(0.45, 1.45, 0.42);
-  root.add(leftLeg, rightLeg, torso, head, nose, crossbow);
-  return { root, leftLeg, rightLeg };
+
+  const makeArm = (ax: number, withCrossbow: boolean): THREE.Group => {
+    const arm = new THREE.Group();
+    arm.position.set(ax, 1.88, 0);
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.46, 0.3), coat);
+    sleeve.position.y = -0.2;
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.26, 0.26), skin);
+    hand.position.y = -0.52;
+    arm.add(sleeve, hand);
+    if (withCrossbow) {
+      const crossbow = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.14, 0.52), palette.getMat(0x78350f, 'matte'));
+      crossbow.position.set(0, -0.58, 0.26);
+      const boltTip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.26), palette.getMat(0x22d3ee, 'emissive'));
+      boltTip.position.set(0, -0.58, 0.56);
+      arm.add(crossbow, boltTip);
+    }
+    return arm;
+  };
+  const leftArm = makeArm(-0.56, false);
+  const rightArm = makeArm(0.56, true);
+  bodyPivot.add(leftLeg, rightLeg, torso, head, brow, leftEye, rightEye, nose, leftArm, rightArm);
+  return { root, bodyPivot, leftEye, rightEye, leftLeg, rightLeg, leftArm, rightArm };
 }
 
 export function createMinecraftVillageWorld(palette: MaterialPalette): MinecraftVillageRig {
@@ -720,6 +855,35 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const torchesFlame: THREE.Object3D[] = [];
   const smokePuffs: Array<{ mesh: THREE.Mesh; baseX: number; baseY: number; baseZ: number; phase: number }> = [];
   const disposables: Array<{ dispose: () => void }> = [];
+  const windUniforms = { uTime: { value: 0 } };
+
+  const makeWindMaterial = (
+    baseMat: THREE.Material,
+    opts: { minY: number; amp: number; speed: number; cacheKey: string },
+  ): THREE.Material => {
+    const mat = baseMat.clone();
+    mat.customProgramCacheKey = () => opts.cacheKey;
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = windUniforms.uTime;
+      shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        float windPhase = 0.0;
+        #ifdef USE_INSTANCING
+          windPhase = instanceMatrix[3].x * 0.17 + instanceMatrix[3].z * 0.13;
+        #endif
+        float windHeight = max(0.0, transformed.y - (${opts.minY.toFixed(3)}));
+        float windGust = sin(uTime * ${opts.speed.toFixed(2)} + windPhase + transformed.y * 0.65)
+                       + 0.45 * sin(uTime * ${(opts.speed * 1.73).toFixed(2)} + windPhase * 1.9);
+        float windCross = cos(uTime * ${(opts.speed * 0.82).toFixed(2)} + windPhase * 1.3);
+        transformed.x += windGust * windHeight * ${opts.amp.toFixed(4)};
+        transformed.z += windCross * windHeight * ${(opts.amp * 0.65).toFixed(4)};`,
+      );
+    };
+    disposables.push(mat);
+    return mat;
+  };
 
   // 1. Classic Minecraft Square Sun high in sky
   const sunGroup = new THREE.Group();
@@ -762,6 +926,11 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const stall1 = createMarketStall(palette, 13.5, 23.8, -0.35, 'wool_yellow');
   const stall2 = createMarketStall(palette, 19.6, 20.6, -1.15, 'wool_yellow');
   group.add(stall1, stall2);
+  [stall1, stall2].forEach((st) =>
+    st.traverse((obj) => {
+      if (obj.userData.isFlame) torchesFlame.push(obj);
+    }),
+  );
   obstacles.push({ x: 13.5, z: 23.8, halfW: 2.0, halfD: 1.4 });
   obstacles.push({ x: 19.6, z: 20.6, halfW: 1.6, halfD: 2.0 });
 
@@ -774,8 +943,11 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   mpTop.position.y = 2.35;
   const mpFlame = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.2), palette.getMat(0xfef08a, 'emissive'));
   mpFlame.position.y = 2.7;
+  mpFlame.userData.isFlame = true;
+  torchesFlame.push(mpFlame);
   marketPost.add(mpPole, mpTop, mpFlame);
   group.add(marketPost);
+  obstacles.push({ x: 16.2, z: 21.8, halfW: 0.55, halfD: 0.55 });
 
   // 4. Irrigated Wheat Farm + Hay Bales + Beehives (x: 22..32, z: 9.5..18.5)
   const farmGroup = new THREE.Group();
@@ -806,6 +978,16 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const fenceWestBot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.95, 3.0), woodFenceMat);
   fenceWestBot.position.set(22.2, 0.48, 17.1);
   farmGroup.add(fenceBack, fenceNorth, fenceSouth, fenceWestTop, fenceWestBot);
+  obstacles.push(
+    { x: 32.2, z: 14.0, halfW: 0.35, halfD: 4.7 },
+    { x: 27.2, z: 9.4, halfW: 5.1, halfD: 0.35 },
+    { x: 27.2, z: 18.6, halfW: 5.1, halfD: 0.35 },
+    { x: 22.2, z: 11.0, halfW: 0.35, halfD: 1.7 },
+    { x: 22.2, z: 17.1, halfW: 0.35, halfD: 1.6 },
+    { x: 31.0, z: 11.15, halfW: 0.75, halfD: 1.2 },
+    { x: 23.3, z: 10.4, halfW: 0.55, halfD: 0.55 },
+    { x: 30.8, z: 17.5, halfW: 0.55, halfD: 0.55 },
+  );
 
   // Hay Bale stacks + Composter + 2 Wooden Beehives
   const hayPositions: Array<[number, number, number]> = [
@@ -838,10 +1020,13 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     farmGroup.add(post, hive, stripe);
   });
 
-  // Instanced Wheat Crops (48 stalks across both irrigated beds)
+  // Instanced Wheat Crops (48 stalks across both irrigated beds, swaying in wind)
   const wheatGeo = new THREE.BoxGeometry(0.45, 0.88, 0.45);
   wheatGeo.translate(0, 0.44, 0);
-  const wheatMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 });
+  const wheatMat = makeWindMaterial(
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 }),
+    { minY: 0.04, amp: 0.18, speed: 2.35, cacheKey: 'voxel-wheat-wind' },
+  );
   const wheatCount = 48;
   const wheatMesh = new THREE.InstancedMesh(wheatGeo, wheatMat, wheatCount);
   const dummy = new THREE.Object3D();
@@ -898,10 +1083,15 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     flowerBox: true,
   });
   group.add(bakery, cabin, farmHut);
+  [bakery, cabin, farmHut].forEach((house) =>
+    house.traverse((obj) => {
+      if (obj.userData.isFlame) torchesFlame.push(obj);
+    }),
+  );
   obstacles.push(
-    { x: 29, z: -1, halfW: 2.9, halfD: 3.3 },
-    { x: -35, z: -14, halfW: 2.8, halfD: 3.1 },
-    { x: 29, z: 28, halfW: 3.1, halfD: 2.9 },
+    { x: 29, z: -1, halfW: 3.3, halfD: 3.5 },
+    { x: -35, z: -14, halfW: 3.2, halfD: 3.3 },
+    { x: 29, z: 28, halfW: 3.4, halfD: 3.2 },
   );
 
   // Outdoor Furnace + Crafting Table Porch outside Bakery (x=25.4, z=-2.8)
@@ -911,6 +1101,7 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const craftBench = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.05, 1.05), palette.getPixelMat('crafting'));
   craftBench.position.set(25.2, 0.525, -3.7);
   group.add(furnace, craftBench);
+  obstacles.push({ x: 25.2, z: -3.1, halfW: 0.72, halfD: 1.32 });
 
   const lanternCoords: Array<[number, number]> = [
     [-3.6, 11.2],
@@ -922,6 +1113,7 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   ];
   lanternCoords.forEach(([lx, lz]) => {
     group.add(createLanternPost(palette, lx, lz));
+    obstacles.push({ x: lx, z: lz, halfW: 0.48, halfD: 0.48 });
   });
 
   // 6. Pillager Watchtower Outpost on Northeast Ridge (outside playable core, dramatic backdrop!)
@@ -940,11 +1132,14 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const opRoof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 3.2, 4), palette.getPixelMat('spruce_plank', 0x7f1d1d));
   opRoof.position.y = 11.4;
   opRoof.rotation.y = Math.PI / 4;
+  const bannerPivot = new THREE.Group();
+  bannerPivot.position.set(0, 8.1, 3.5);
   const banner = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.2, 0.16), palette.getMat(0x1e293b, 'matte'));
-  banner.position.set(0, 7.0, 3.5);
+  banner.position.set(0, -1.1, 0);
   const bannerTrim = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.3, 0.2), palette.getMat(0x22d3ee, 'emissive'));
-  bannerTrim.position.set(0, 7.1, 3.52);
-  outpost.add(opMound, opBase, opShaft, opDeck, opRoof, banner, bannerTrim);
+  bannerTrim.position.set(0, -1.0, 0.02);
+  bannerPivot.add(banner, bannerTrim);
+  outpost.add(opMound, opBase, opShaft, opDeck, opRoof, bannerPivot);
   group.add(outpost);
 
   // Campfire smoke rising behind outpost forest (like screenshot #13)
@@ -970,8 +1165,13 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     group.add(pm.root);
     pillagers.push({
       root: pm.root,
+      bodyPivot: pm.bodyPivot,
+      leftEye: pm.leftEye,
+      rightEye: pm.rightEye,
       leftLeg: pm.leftLeg,
       rightLeg: pm.rightLeg,
+      leftArm: pm.leftArm,
+      rightArm: pm.rightArm,
       centerX: 45,
       baseY: 2.0,
       centerZ: -35,
@@ -986,13 +1186,13 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     waypoints: Array<[number, number]>;
     speed: number;
   }> = [
-    { style: 'farmer', waypoints: [[21, 14], [12, 13], [9, 9], [18, 12]], speed: 2.0 },
-    { style: 'farmer', waypoints: [[26, 20], [21, 19], [23, 25], [16, 22]], speed: 1.85 },
+    { style: 'farmer', waypoints: [[20, 14], [14, 13], [11, 8.5], [18.5, 11]], speed: 2.0 },
+    { style: 'farmer', waypoints: [[23.5, 21.5], [21.5, 24.5], [16.5, 25.5], [16.5, 18.8]], speed: 1.85 },
     { style: 'librarian', waypoints: [[-6, 9], [-14, 7], [-12, -2], [-4, 3]], speed: 2.1 },
     { style: 'cleric', waypoints: [[-14, -10], [-18, -16], [-9, -15], [-7, -7]], speed: 1.9 },
-    { style: 'fletcher', waypoints: [[5, 8], [10, 14], [4, 19], [-2, 15]], speed: 2.2 },
+    { style: 'fletcher', waypoints: [[4.5, 8], [10.5, 14], [4.5, 19.5], [-1.5, 15]], speed: 2.2 },
     { style: 'shepherd', waypoints: [[15, 2], [21, -2], [18, -9], [11, -3]], speed: 2.0 },
-    { style: 'cleric', waypoints: [[-17, 17], [-11, 22], [-6, 25], [-13, 12]], speed: 1.95 },
+    { style: 'cleric', waypoints: [[-18, 17], [-11, 21], [-6, 25], [-13, 12]], speed: 1.95 },
     { style: 'librarian', waypoints: [[4, -10], [-4, -18], [4, -22], [9, -14]], speed: 2.0 },
   ];
 
@@ -1026,10 +1226,10 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   // Wandering Trader & 2 Llamas at Market Square
   const trader = createVillagerMesh(palette, 'trader');
   trader.waypoints = [
-    [14.5, 21.2],
-    [17.8, 19.8],
-    [15.8, 17.5],
-    [12.8, 19.6],
+    [13.5, 20.5],
+    [16.2, 18.2],
+    [14.2, 16.5],
+    [11.8, 18.8],
   ];
   trader.x = trader.waypoints[0][0];
   trader.z = trader.waypoints[0][1];
@@ -1054,6 +1254,10 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const llama2 = createLlamaMesh(palette, 15.2, 23.1, 0.5, 0x0284c7);
   group.add(llama1.root, llama2.root);
   llamas.push(llama1, llama2);
+  obstacles.push(
+    { x: 17.4, z: 22.8, halfW: 0.55, halfD: 0.65 },
+    { x: 15.2, z: 23.1, halfW: 0.55, halfD: 0.65 },
+  );
 
   // Hutan Satwa (Tempat Hewan): Voxel Fox + 2 Fluffy Sheep at (27..31, -13..-16)
   const buildFox = (fx: number, fz: number, yaw: number) => {
@@ -1085,10 +1289,14 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     earL.position.set(-0.14, 0.22, 0);
     const earR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.08), dark);
     earR.position.set(0.14, 0.22, 0);
-    head.add(skull, snout, earL, earR);
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.05), dark);
+    eyeL.position.set(-0.11, 0.05, 0.2);
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.05), dark);
+    eyeR.position.set(0.11, 0.05, 0.2);
+    head.add(skull, snout, earL, earR, eyeL, eyeR);
     r.add(body, tail, tailTip, head);
     group.add(r);
-    critters.push({ root: r, head, baseX: fx, baseZ: fz, baseYaw: yaw, phase: 0.4 });
+    critters.push({ root: r, head, leftEye: eyeL, rightEye: eyeR, baseX: fx, baseZ: fz, baseYaw: yaw, phase: 0.4 });
   };
   const buildSheep = (sx: number, sz: number, yaw: number, phase: number) => {
     const r = new THREE.Group();
@@ -1118,7 +1326,7 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     head.add(skull, crown, eL, eR);
     r.add(woolBody, head);
     group.add(r);
-    critters.push({ root: r, head, baseX: sx, baseZ: sz, baseYaw: yaw, phase });
+    critters.push({ root: r, head, leftEye: eL, rightEye: eR, baseX: sx, baseZ: sz, baseYaw: yaw, phase });
   };
   buildFox(27.2, -13.4, -0.9);
   buildSheep(29.8, -12.1, -2.1, 1.8);
@@ -1152,9 +1360,9 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   const golem2 = createIronGolemMesh(palette, false);
   golem2.waypoints = [
     [13.5, 16.5],
-    [19.2, 14.2],
-    [19.5, 19.2],
-    [12.8, 20.4],
+    [17.5, 14.5],
+    [17.2, 17.5],
+    [12.8, 19.2],
   ];
   golem2.x = golem2.waypoints[0][0];
   golem2.z = golem2.waypoints[0][1];
@@ -1212,6 +1420,7 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     const s = 0.95 + (i % 3) * 0.12;
     if (isBirch) birchSpecs.push([tx, tz, s]);
     else oakSpecs.push([tx, tz, s]);
+    obstacles.push({ x: tx, z: tz, halfW: 0.68 * s, halfD: 0.68 * s });
   });
 
   // Dense outer Minecraft Forest Ring (150 trees)
@@ -1275,12 +1484,22 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     disposables.push(trunkGeo, canopyLowGeo, canopyTopGeo);
   };
 
-  const oakLeafMat = palette.getPixelMat('leaves_oak');
-  const birchLeafMat = palette.getPixelMat('leaves_birch');
+  const oakLeafMat = makeWindMaterial(palette.getPixelMat('leaves_oak'), {
+    minY: 2.3,
+    amp: 0.058,
+    speed: 1.85,
+    cacheKey: 'voxel-tree-wind',
+  });
+  const birchLeafMat = makeWindMaterial(palette.getPixelMat('leaves_birch'), {
+    minY: 2.3,
+    amp: 0.062,
+    speed: 1.95,
+    cacheKey: 'voxel-tree-wind',
+  });
   buildTreeInstancing(oakSpecs, palette.getPixelMat('oak_log'), oakLeafMat, [0xffffff, 0xd9f99d, 0xbef264]);
   buildTreeInstancing(birchSpecs, palette.getPixelMat('birch_log'), birchLeafMat, [0xffffff, 0xecfccb, 0xd9f99d]);
 
-  // 9. Instanced Tall Grass Tufts, Poppies, Daisies & Pebbles across Meadow
+  // 9. Instanced Tall Grass Tufts, Poppies, Daisies & Pebbles across Meadow (with wind sway)
   const grassSpots: Array<[number, number]> = [];
   for (let i = 0; i < 240; i++) {
     const gx = Math.sin(i * 12.9898) * 39;
@@ -1294,7 +1513,12 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   if (grassSpots.length > 0) {
     const bladeGeo = new THREE.BoxGeometry(0.16, 0.56, 0.42);
     bladeGeo.translate(0, 0.28, 0);
-    const bladeMat = palette.getMat(0x5ea832, 'matte');
+    const bladeMat = makeWindMaterial(palette.getMat(0x5ea832, 'matte'), {
+      minY: 0.04,
+      amp: 0.24,
+      speed: 2.85,
+      cacheKey: 'voxel-grass-wind',
+    });
     const grassMesh = new THREE.InstancedMesh(bladeGeo, bladeMat, grassSpots.length);
     const gd = new THREE.Object3D();
     const gc = new THREE.Color();
@@ -1315,18 +1539,29 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     disposables.push(bladeGeo);
   }
 
-  // Flowers (Poppies & White/Yellow Daisies)
+  // Flowers (Poppies & White/Yellow Daisies, stem + petals share exact wind shader so heads stay attached)
   const flowerCount = 68;
   const stemGeo = new THREE.BoxGeometry(0.1, 0.34, 0.1);
   stemGeo.translate(0, 0.17, 0);
   const petalGeo = new THREE.BoxGeometry(0.3, 0.22, 0.3);
   petalGeo.translate(0, 0.42, 0);
-  const stemMesh = new THREE.InstancedMesh(stemGeo, palette.getMat(0x16a34a, 'matte'), flowerCount);
-  const petalMesh = new THREE.InstancedMesh(
-    petalGeo,
+  const stemWindMat = makeWindMaterial(palette.getMat(0x16a34a, 'matte'), {
+    minY: 0.04,
+    amp: 0.22,
+    speed: 2.65,
+    cacheKey: 'voxel-flower-wind',
+  });
+  const petalWindMat = makeWindMaterial(
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78 }),
-    flowerCount,
+    {
+      minY: 0.04,
+      amp: 0.22,
+      speed: 2.65,
+      cacheKey: 'voxel-flower-wind',
+    },
   );
+  const stemMesh = new THREE.InstancedMesh(stemGeo, stemWindMat, flowerCount);
+  const petalMesh = new THREE.InstancedMesh(petalGeo, petalWindMat, flowerCount);
   const fd = new THREE.Object3D();
   const fc = new THREE.Color();
   const flowerColors = [0xef4444, 0xf8fafc, 0xfacc15, 0xef4444];
@@ -1348,7 +1583,7 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   stemMesh.computeBoundingSphere();
   petalMesh.computeBoundingSphere();
   group.add(stemMesh, petalMesh);
-  disposables.push(stemGeo, petalGeo, petalMesh.material as THREE.Material);
+  disposables.push(stemGeo, petalGeo);
 
   // Stone pebbles scattered on meadow
   const pebbleGeo = new THREE.BoxGeometry(0.45, 0.16, 0.38);
@@ -1422,6 +1657,32 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
   group.add(peakBases, peakCaps);
   disposables.push(hillGeo, peakBaseGeo);
 
+  // 11. Drifting Sunlit Breeze Motes & Falling Leaves across Village & Forest
+  const moteCount = 56;
+  const moteGeo = new THREE.BoxGeometry(0.16, 0.08, 0.16);
+  const moteMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.78,
+    depthWrite: false,
+  });
+  const moteMesh = new THREE.InstancedMesh(moteGeo, moteMat, moteCount);
+  moteMesh.frustumCulled = false;
+  const moteSeeds = new Float32Array(moteCount * 4);
+  const mc = new THREE.Color();
+  const motePalette = [0xbef264, 0x86efac, 0xfef08a, 0xd9f99d];
+  for (let i = 0; i < moteCount; i++) {
+    moteSeeds[i * 4 + 0] = ((i * 37) % 72) - 36; // baseX
+    moteSeeds[i * 4 + 1] = 1.4 + ((i * 19) % 42) * 0.12; // baseY
+    moteSeeds[i * 4 + 2] = ((i * 53) % 68) - 34; // baseZ
+    moteSeeds[i * 4 + 3] = i * 0.73; // phase
+    mc.setHex(motePalette[i % motePalette.length]);
+    moteMesh.setColorAt(i, mc);
+  }
+  if (moteMesh.instanceColor) moteMesh.instanceColor.needsUpdate = true;
+  group.add(moteMesh);
+  disposables.push(moteGeo, moteMat);
+
   return {
     group,
     obstacles,
@@ -1435,39 +1696,227 @@ export function createMinecraftVillageWorld(palette: MaterialPalette): Minecraft
     critters,
     torchesFlame,
     smokePuffs,
+    windUniforms,
+    outpostBanner: bannerPivot,
+    breezeMotes: { mesh: moteMesh, seeds: moteSeeds, count: moteCount },
     disposables,
   };
 }
+
+function pushOutFromBoxes(
+  pos: { x: number; z: number },
+  radius: number,
+  boxes: VillageObstacle[],
+): boolean {
+  let hit = false;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < boxes.length; i++) {
+      const obs = boxes[i];
+      const cx = THREE.MathUtils.clamp(pos.x, obs.x - obs.halfW, obs.x + obs.halfW);
+      const cz = THREE.MathUtils.clamp(pos.z, obs.z - obs.halfD, obs.z + obs.halfD);
+      const dx = pos.x - cx;
+      const dz = pos.z - cz;
+      const distSq = dx * dx + dz * dz;
+      if (distSq < radius * radius) {
+        hit = true;
+        if (distSq > 0.0001) {
+          const d = Math.sqrt(distSq);
+          pos.x += (dx / d) * (radius - d);
+          pos.z += (dz / d) * (radius - d);
+        } else {
+          const penX = obs.halfW + radius - Math.abs(pos.x - obs.x);
+          const penZ = obs.halfD + radius - Math.abs(pos.z - obs.z);
+          if (penX < penZ) {
+            pos.x += pos.x >= obs.x ? penX : -penX;
+          } else {
+            pos.z += pos.z >= obs.z ? penZ : -penZ;
+          }
+        }
+      }
+    }
+  }
+  pos.x = THREE.MathUtils.clamp(pos.x, -40, 40);
+  pos.z = THREE.MathUtils.clamp(pos.z, -37, 39);
+  return hit;
+}
+
+function hasAheadObstacle(
+  x: number,
+  z: number,
+  dirX: number,
+  dirZ: number,
+  probeDist: number,
+  radius: number,
+  boxes: VillageObstacle[],
+): boolean {
+  const px = x + dirX * probeDist;
+  const pz = z + dirZ * probeDist;
+  for (let i = 0; i < boxes.length; i++) {
+    const obs = boxes[i];
+    const cx = THREE.MathUtils.clamp(px, obs.x - obs.halfW, obs.x + obs.halfW);
+    const cz = THREE.MathUtils.clamp(pz, obs.z - obs.halfD, obs.z + obs.halfD);
+    const dx = px - cx;
+    const dz = pz - cz;
+    if (dx * dx + dz * dz < radius * radius) return true;
+  }
+  return false;
+}
+
+const _moveScratch = { x: 0, z: 0 };
+const _moteDummy = new THREE.Object3D();
 
 export function updateMinecraftVillage(
   rig: MinecraftVillageRig,
   dt: number,
   elapsed: number,
+  extraObstacles: VillageObstacle[] = [],
 ): void {
-  // 1. Villagers & Wandering Trader stroll smoothly along village waypoints
+  rig.windUniforms.uTime.value = elapsed;
+
+  if (rig.outpostBanner) {
+    rig.outpostBanner.rotation.x = 0.08 + Math.sin(elapsed * 3.1) * 0.18 + Math.sin(elapsed * 5.7) * 0.06;
+    rig.outpostBanner.rotation.z = Math.cos(elapsed * 2.4) * 0.09;
+  }
+
+  for (let i = 0; i < rig.torchesFlame.length; i++) {
+    const fl = rig.torchesFlame[i];
+    const flick = 0.9 + Math.sin(elapsed * 14 + i * 2.1) * 0.18 + Math.cos(elapsed * 21 + i) * 0.07;
+    fl.scale.set(1, flick, 1);
+    fl.rotation.z = Math.sin(elapsed * 7.5 + i * 1.3) * 0.14;
+  }
+
+  if (rig.breezeMotes) {
+    const { mesh, seeds, count } = rig.breezeMotes;
+    for (let i = 0; i < count; i++) {
+      const bx = seeds[i * 4 + 0];
+      const by = seeds[i * 4 + 1];
+      const bz = seeds[i * 4 + 2];
+      const ph = seeds[i * 4 + 3];
+      const driftX = ((bx + elapsed * (1.55 + (i % 3) * 0.35) + 42) % 84) - 42;
+      const driftZ = ((bz + elapsed * 0.45 + Math.sin(elapsed * 0.9 + ph) * 2.2 + 38) % 76) - 38;
+      const flutterY = by + Math.sin(elapsed * 1.8 + ph) * 0.75;
+      _moteDummy.position.set(driftX, flutterY, driftZ);
+      _moteDummy.rotation.set(elapsed * 1.4 + ph, elapsed * 1.9 + ph, Math.sin(elapsed * 2.2 + ph) * 0.6);
+      const s = 0.75 + Math.sin(elapsed * 2.6 + ph) * 0.25;
+      _moteDummy.scale.setScalar(s);
+      _moteDummy.updateMatrix();
+      mesh.setMatrixAt(i, _moteDummy.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // 1. Villagers & Wandering Trader stroll with obstacle avoidance & living squash-and-stretch + blinking
   for (let i = 0; i < rig.villagers.length; i++) {
     const v = rig.villagers[i];
+    const breath = Math.sin(elapsed * 2.6 + i * 1.1);
+    const vBlink = computeVillageBlink(elapsed, i * 1.37);
+    v.leftEye.scale.y = vBlink;
+    v.rightEye.scale.y = vBlink;
+
     if (v.pauseTimer > 0) {
       v.pauseTimer -= dt;
-      v.leftLeg.rotation.x *= 0.85;
-      v.rightLeg.rotation.x *= 0.85;
-      v.body.position.y = 0;
-      v.head.rotation.y = Math.sin(elapsed * 1.8 + i) * 0.35;
+      v.leftLeg.rotation.x = THREE.MathUtils.damp(v.leftLeg.rotation.x, 0, 14, dt);
+      v.rightLeg.rotation.x = THREE.MathUtils.damp(v.rightLeg.rotation.x, 0, 14, dt);
+      v.body.position.y = THREE.MathUtils.damp(v.body.position.y, 0, 14, dt);
+      v.headGroup.rotation.y = THREE.MathUtils.damp(
+        v.headGroup.rotation.y,
+        Math.sin(elapsed * 1.6 + i) * 0.34,
+        8,
+        dt,
+      );
+      v.headGroup.rotation.x = Math.sin(elapsed * 2.2 + i) * 0.05;
+
+      // Living idle breathing squash-and-stretch + natural arm sway
+      const sy = 1 + breath * 0.042;
+      const sxz = 1 / Math.sqrt(sy);
+      v.bodyPivot.scale.set(sxz, sy, sxz);
+
+      if (v.style === 'farmer') {
+        v.leftArm.rotation.x = THREE.MathUtils.damp(v.leftArm.rotation.x, -0.82 + breath * 0.04, 12, dt);
+        v.rightArm.rotation.x = THREE.MathUtils.damp(v.rightArm.rotation.x, -0.82 + breath * 0.04, 12, dt);
+      } else {
+        v.leftArm.rotation.x = THREE.MathUtils.damp(v.leftArm.rotation.x, -0.15 + Math.sin(elapsed * 2.2 + i) * 0.14, 12, dt);
+        v.rightArm.rotation.x = THREE.MathUtils.damp(v.rightArm.rotation.x, -0.2 - Math.sin(elapsed * 2.2 + i) * 0.14, 12, dt);
+      }
       continue;
     }
+
     const [tx, tz] = v.waypoints[v.wpIdx];
     const dx = tx - v.x;
     const dz = tz - v.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < 0.35) {
+    if (dist < 0.45) {
       v.wpIdx = (v.wpIdx + 1) % v.waypoints.length;
-      v.pauseTimer = 1.2 + (i % 3) * 0.7;
+      v.pauseTimer = 1.15 + (i % 3) * 0.65;
+      v.stuckTimer = 0;
       continue;
     }
+
+    let dirX = dx / dist;
+    let dirZ = dz / dist;
+    const vRad = 0.56;
+    const probe = hasAheadObstacle(v.x, v.z, dirX, dirZ, 0.95, vRad, rig.obstacles) ||
+      hasAheadObstacle(v.x, v.z, dirX, dirZ, 0.95, vRad, extraObstacles);
+    if (probe) {
+      // Steer tangentially around wall/pole/house!
+      const perpX = -dirZ * v.avoidSign;
+      const perpZ = dirX * v.avoidSign;
+      dirX = dirX * 0.35 + perpX * 0.9;
+      dirZ = dirZ * 0.35 + perpZ * 0.9;
+      const nLen = Math.hypot(dirX, dirZ) || 1;
+      dirX /= nLen;
+      dirZ /= nLen;
+    }
+
     const step = Math.min(dist, v.speed * dt);
-    v.x += (dx / dist) * step;
-    v.z += (dz / dist) * step;
-    const targetYaw = Math.atan2(dx, dz);
+    const prevX = v.x;
+    const prevZ = v.z;
+    _moveScratch.x = v.x + dirX * step;
+    _moveScratch.z = v.z + dirZ * step;
+    pushOutFromBoxes(_moveScratch, vRad, rig.obstacles);
+    pushOutFromBoxes(_moveScratch, vRad, extraObstacles);
+
+    // Keep distance from other villagers & golems
+    for (let j = 0; j < rig.villagers.length; j++) {
+      if (j === i) continue;
+      const ov = rig.villagers[j];
+      const vx = _moveScratch.x - ov.x;
+      const vz = _moveScratch.z - ov.z;
+      const vd = Math.hypot(vx, vz);
+      if (vd > 0.001 && vd < 1.05) {
+        _moveScratch.x += (vx / vd) * (1.05 - vd) * 0.5;
+        _moveScratch.z += (vz / vd) * (1.05 - vd) * 0.5;
+      }
+    }
+    for (let j = 0; j < rig.golems.length; j++) {
+      const og = rig.golems[j];
+      const vx = _moveScratch.x - og.x;
+      const vz = _moveScratch.z - og.z;
+      const vd = Math.hypot(vx, vz);
+      if (vd > 0.001 && vd < 1.45) {
+        _moveScratch.x += (vx / vd) * (1.45 - vd);
+        _moveScratch.z += (vz / vd) * (1.45 - vd);
+      }
+    }
+
+    const moved = Math.hypot(_moveScratch.x - prevX, _moveScratch.z - prevZ);
+    v.x = _moveScratch.x;
+    v.z = _moveScratch.z;
+
+    if (moved < step * 0.25) {
+      v.stuckTimer += dt;
+      if (v.stuckTimer > 0.9) {
+        v.avoidSign *= -1;
+        v.wpIdx = (v.wpIdx + 1) % v.waypoints.length;
+        v.stuckTimer = 0;
+      }
+    } else {
+      v.stuckTimer = 0;
+    }
+
+    const moveDx = v.x - prevX;
+    const moveDz = v.z - prevZ;
+    const targetYaw = moved > 0.005 ? Math.atan2(moveDx, moveDz) : Math.atan2(dx, dz);
     let diff = targetYaw - v.yaw;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -1476,11 +1925,26 @@ export function updateMinecraftVillage(
     v.root.rotation.y = v.yaw;
 
     v.walkPhase += dt * (5.5 + v.speed);
-    const swing = Math.sin(v.walkPhase) * 0.52;
+    const swing = Math.sin(v.walkPhase) * 0.54;
+    const stepBounce = Math.abs(Math.sin(v.walkPhase));
     v.leftLeg.rotation.x = swing;
     v.rightLeg.rotation.x = -swing;
-    v.body.position.y = Math.abs(Math.sin(v.walkPhase)) * 0.08;
-    v.head.rotation.y *= 0.9;
+    v.body.position.y = stepBounce * 0.07;
+    v.headGroup.rotation.y = THREE.MathUtils.damp(v.headGroup.rotation.y, 0, 8, dt);
+    v.headGroup.rotation.x = Math.sin(v.walkPhase * 2) * 0.03;
+
+    // Squash-and-stretch stride life
+    const walkSy = 1 + breath * 0.03 + stepBounce * 0.055;
+    const walkSxz = 1 / Math.sqrt(walkSy);
+    v.bodyPivot.scale.set(walkSxz, walkSy, walkSxz);
+
+    if (v.style === 'farmer') {
+      v.leftArm.rotation.x = -0.82 + stepBounce * 0.06;
+      v.rightArm.rotation.x = -0.82 + stepBounce * 0.06;
+    } else {
+      v.leftArm.rotation.x = -swing * 0.65;
+      v.rightArm.rotation.x = swing * 0.65;
+    }
 
     const inter = rig.interactables.find((it) => it.id === v.root.userData.villageId);
     if (inter) {
@@ -1489,30 +1953,78 @@ export function updateMinecraftVillage(
     }
   }
 
-  // 2. Iron Golems heavy steady patrol
+  // 2. Iron Golems heavy steady patrol with obstacle avoidance + heavy breathing stretch + blink
   for (let i = 0; i < rig.golems.length; i++) {
     const g = rig.golems[i];
+    const breath = Math.sin(elapsed * 1.9 + i * 1.4);
+    const gBlink = computeVillageBlink(elapsed, 2.2 + i * 1.9);
+    g.leftEye.scale.y = gBlink;
+    g.rightEye.scale.y = gBlink;
+
     if (g.pauseTimer > 0) {
       g.pauseTimer -= dt;
-      g.leftLeg.rotation.x *= 0.85;
-      g.rightLeg.rotation.x *= 0.85;
-      g.rightArm.rotation.x *= 0.85;
-      if (!g.holdsFlower) g.leftArm.rotation.x *= 0.85;
+      g.leftLeg.rotation.x = THREE.MathUtils.damp(g.leftLeg.rotation.x, 0, 12, dt);
+      g.rightLeg.rotation.x = THREE.MathUtils.damp(g.rightLeg.rotation.x, 0, 12, dt);
+      g.rightArm.rotation.x = THREE.MathUtils.damp(g.rightArm.rotation.x, 0, 12, dt);
+      if (!g.holdsFlower) g.leftArm.rotation.x = THREE.MathUtils.damp(g.leftArm.rotation.x, 0, 12, dt);
+      g.headGroup.rotation.y = Math.sin(elapsed * 0.9 + i) * 0.25;
+      const sy = 1 + breath * 0.034;
+      const sxz = 1 / Math.sqrt(sy);
+      g.bodyPivot.scale.set(sxz, sy, sxz);
       continue;
     }
+
     const [tx, tz] = g.waypoints[g.wpIdx];
     const dx = tx - g.x;
     const dz = tz - g.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < 0.45) {
+    if (dist < 0.55) {
       g.wpIdx = (g.wpIdx + 1) % g.waypoints.length;
       g.pauseTimer = 1.6;
+      g.stuckTimer = 0;
       continue;
     }
+
+    let dirX = dx / dist;
+    let dirZ = dz / dist;
+    const gRad = 0.92;
+    if (
+      hasAheadObstacle(g.x, g.z, dirX, dirZ, 1.25, gRad, rig.obstacles) ||
+      hasAheadObstacle(g.x, g.z, dirX, dirZ, 1.25, gRad, extraObstacles)
+    ) {
+      const perpX = -dirZ * g.avoidSign;
+      const perpZ = dirX * g.avoidSign;
+      dirX = dirX * 0.35 + perpX * 0.9;
+      dirZ = dirZ * 0.35 + perpZ * 0.9;
+      const nLen = Math.hypot(dirX, dirZ) || 1;
+      dirX /= nLen;
+      dirZ /= nLen;
+    }
+
     const step = Math.min(dist, 1.45 * dt);
-    g.x += (dx / dist) * step;
-    g.z += (dz / dist) * step;
-    const targetYaw = Math.atan2(dx, dz);
+    const prevX = g.x;
+    const prevZ = g.z;
+    _moveScratch.x = g.x + dirX * step;
+    _moveScratch.z = g.z + dirZ * step;
+    pushOutFromBoxes(_moveScratch, gRad, rig.obstacles);
+    pushOutFromBoxes(_moveScratch, gRad, extraObstacles);
+
+    const moved = Math.hypot(_moveScratch.x - prevX, _moveScratch.z - prevZ);
+    g.x = _moveScratch.x;
+    g.z = _moveScratch.z;
+
+    if (moved < step * 0.25) {
+      g.stuckTimer += dt;
+      if (g.stuckTimer > 1.0) {
+        g.avoidSign *= -1;
+        g.wpIdx = (g.wpIdx + 1) % g.waypoints.length;
+        g.stuckTimer = 0;
+      }
+    } else {
+      g.stuckTimer = 0;
+    }
+
+    const targetYaw = moved > 0.005 ? Math.atan2(g.x - prevX, g.z - prevZ) : Math.atan2(dx, dz);
     let diff = targetYaw - g.yaw;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -1521,7 +2033,8 @@ export function updateMinecraftVillage(
     g.root.rotation.y = g.yaw;
 
     g.walkPhase += dt * 3.8;
-    const swing = Math.sin(g.walkPhase) * 0.4;
+    const swing = Math.sin(g.walkPhase) * 0.42;
+    const stomp = Math.abs(Math.sin(g.walkPhase));
     g.leftLeg.rotation.x = swing;
     g.rightLeg.rotation.x = -swing;
     g.rightArm.rotation.x = swing * 0.65;
@@ -1530,6 +2043,10 @@ export function updateMinecraftVillage(
     } else {
       g.leftArm.rotation.x = -0.65 + Math.sin(elapsed * 2.5) * 0.08;
     }
+    g.headGroup.rotation.y = THREE.MathUtils.damp(g.headGroup.rotation.y, 0, 6, dt);
+    const golemSy = 1 + breath * 0.025 + stomp * 0.04;
+    const golemSxz = 1 / Math.sqrt(golemSy);
+    g.bodyPivot.scale.set(golemSxz, golemSy, golemSxz);
 
     const inter = rig.interactables.find((it) => it.id === g.root.userData.villageId);
     if (inter) {
@@ -1538,11 +2055,16 @@ export function updateMinecraftVillage(
     }
   }
 
-  // 3. Llamas & Hutan Satwa Critters gentle idle breathing & grazing
+  // 3. Llamas & Hutan Satwa Critters gentle idle breathing squash-and-stretch, blinking & grazing
   for (const l of rig.llamas) {
     l.headPivot.rotation.y = Math.sin(elapsed * 1.1 + l.phase) * 0.25;
     l.headPivot.rotation.x = Math.sin(elapsed * 1.8 + l.phase) * 0.08;
-    l.root.position.y = Math.abs(Math.sin(elapsed * 1.5 + l.phase)) * 0.04;
+    const lBlink = computeVillageBlink(elapsed, l.phase + 0.9);
+    l.leftEye.scale.y = lBlink;
+    l.rightEye.scale.y = lBlink;
+    const sy = 1 + Math.sin(elapsed * 2.2 + l.phase) * 0.04;
+    const sxz = 1 / Math.sqrt(sy);
+    l.root.scale.set(sxz, sy, sxz);
   }
   for (const c of rig.critters) {
     const t = elapsed * 1.3 + c.phase;
@@ -1551,6 +2073,12 @@ export function updateMinecraftVillage(
     c.root.rotation.y = c.baseYaw + Math.sin(t * 0.7) * 0.35;
     c.head.rotation.x = Math.max(0, Math.sin(t * 1.6)) * 0.32;
     c.head.rotation.y = Math.cos(t * 1.1) * 0.22;
+    const cBlink = computeVillageBlink(elapsed, c.phase + 2.4);
+    c.leftEye.scale.y = cBlink;
+    c.rightEye.scale.y = cBlink;
+    const sy = 1 + Math.sin(elapsed * 3.0 + c.phase) * 0.045;
+    const sxz = 1 / Math.sqrt(sy);
+    c.root.scale.set(sxz, sy, sxz);
   }
 
   // 4. Voxel Bees buzzing in figure-8 over flowers & farm
@@ -1568,7 +2096,7 @@ export function updateMinecraftVillage(
     b.rightWing.rotation.z = -wingFlap;
   }
 
-  // 5. Pillager Outpost ridge patrol + smoke drift
+  // 5. Pillager Outpost ridge patrol + crossbow aiming, blinking & breathing stretch
   for (const p of rig.pillagers) {
     const a = elapsed * 0.55 + p.phase;
     const px = p.centerX + Math.cos(a) * p.patrolR;
@@ -1578,6 +2106,15 @@ export function updateMinecraftVillage(
     const sw = Math.sin(elapsed * 5 + p.phase) * 0.45;
     p.leftLeg.rotation.x = sw;
     p.rightLeg.rotation.x = -sw;
+    p.rightArm.rotation.x = -0.95 + Math.sin(elapsed * 2.5 + p.phase) * 0.14;
+    p.leftArm.rotation.x = -0.82 - Math.sin(elapsed * 2.5 + p.phase) * 0.12;
+    p.leftArm.rotation.z = 0.28;
+    const pBlink = computeVillageBlink(elapsed, p.phase + 1.5);
+    p.leftEye.scale.y = pBlink;
+    p.rightEye.scale.y = pBlink;
+    const sy = 1 + Math.sin(elapsed * 2.8 + p.phase) * 0.04;
+    const sxz = 1 / Math.sqrt(sy);
+    p.bodyPivot.scale.set(sxz, sy, sxz);
   }
 
   for (const s of rig.smokePuffs) {

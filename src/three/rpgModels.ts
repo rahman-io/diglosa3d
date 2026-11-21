@@ -1,18 +1,24 @@
 import * as THREE from 'three';
-import { ZONE_CAVE_STORIES, ZONE_DOORS, ZONE_INFO } from '../data/diglosaCatalog';
-import { CaveBlockKind, DoorDef, MonsterType, ZoneId } from '../types/game';
+import { WEAPON_ORDER, ZONE_CAVE_STORIES, ZONE_DOORS, ZONE_INFO } from '../data/diglosaCatalog';
+import { CaveBlockKind, DoorDef, MonsterType, WeaponId, ZoneId } from '../types/game';
 import { MaterialPalette } from './materials';
 import { createMinecraftHouse } from './minecraftVillage';
+import { createEnemyBlasterMesh, createWeaponMesh } from './weaponModels';
 
 export interface HeroAvatarRig {
   root: THREE.Group;
   body: THREE.Group;
+  upperBody: THREE.Group;
+  headGroup: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   leftLeg: THREE.Group;
   rightLeg: THREE.Group;
   leftArm: THREE.Group;
   rightArm: THREE.Group;
   dashRing: THREE.Mesh;
   weaponGroup: THREE.Group;
+  weaponMeshes: Record<WeaponId, THREE.Group>;
   weaponTipMat: THREE.MeshStandardMaterial;
 }
 
@@ -20,7 +26,22 @@ export interface OwlMessengerRig {
   root: THREE.Group;
   leftWing: THREE.Group;
   rightWing: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
   envelope: THREE.Group;
+}
+
+export function computeBlinkScale(elapsed: number, phase = 0): number {
+  const period = 3.4 + (Math.abs(Math.sin(phase * 3.17)) * 1.1);
+  const cycle = (elapsed + Math.abs(phase) * 2.13) % period;
+  if (cycle < 0.14) {
+    return Math.max(0.08, 1 - Math.sin((cycle / 0.14) * Math.PI) * 0.92);
+  }
+  // Occasional quick natural double-blink
+  if (cycle > 0.24 && cycle < 0.36 && Math.sin(phase * 7.3) > 0.25) {
+    return Math.max(0.08, 1 - Math.sin(((cycle - 0.24) / 0.12) * Math.PI) * 0.92);
+  }
+  return 1;
 }
 
 export interface PortalArchRig {
@@ -185,55 +206,63 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
   const rightLeg = makeLeg(0.24);
   body.add(leftLeg, rightLeg);
 
-  // Torso & Belt
+  const upperBody = new THREE.Group();
+  upperBody.position.set(0, 1.1, 0);
+  body.add(upperBody);
+
+  // Torso & Belt (children of upperBody, local Y = oldY - 1.1)
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.05, 0.58), tunic);
-  torso.position.y = 1.58;
+  torso.position.y = 0.48;
   torso.castShadow = true;
-  body.add(torso);
+  upperBody.add(torso);
 
   const belt = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.16, 0.62), boot);
-  belt.position.y = 1.18;
+  belt.position.y = 0.08;
   const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.08), gold);
-  buckle.position.set(0, 1.18, 0.32);
-  body.add(belt, buckle);
+  buckle.position.set(0, 0.08, 0.32);
+  upperBody.add(belt, buckle);
 
   // Explorer Backpack
   const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.88, 0.42), pack);
-  backpack.position.set(0, 1.62, -0.45);
+  backpack.position.set(0, 0.52, -0.45);
   backpack.castShadow = true;
   const bedroll = new THREE.Mesh(
     new THREE.CylinderGeometry(0.16, 0.16, 0.8, 8),
     palette.getMat(0xf59e0b, 'matte'),
   );
   bedroll.rotation.z = Math.PI / 2;
-  bedroll.position.set(0, 2.12, -0.45);
-  body.add(backpack, bedroll);
+  bedroll.position.set(0, 1.02, -0.45);
+  upperBody.add(backpack, bedroll);
 
-  // Head & Adventurer Hat
+  // Head & Adventurer Hat pivoted at neck (y = 2.15 => 1.05 inside upperBody)
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.05, 0);
+  upperBody.add(headGroup);
+
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.84, 0.82), skin);
-  head.position.y = 2.55;
+  head.position.y = 0.4;
   head.castShadow = true;
-  body.add(head);
+  headGroup.add(head);
 
   const eyeMat = palette.getMat(0x0f172a, 'gloss');
   const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.06), eyeMat);
-  leftEye.position.set(-0.2, 2.56, 0.42);
+  leftEye.position.set(-0.2, 0.41, 0.42);
   const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.06), eyeMat);
-  rightEye.position.set(0.2, 2.56, 0.42);
-  body.add(leftEye, rightEye);
+  rightEye.position.set(0.2, 0.41, 0.42);
+  headGroup.add(leftEye, rightEye);
 
   const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.76, 0.78, 0.1, 14), hatMat);
-  hatBrim.position.set(0, 2.98, 0);
+  hatBrim.position.set(0, 0.83, 0);
   const hatCrown = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.72), hatMat);
-  hatCrown.position.set(0, 3.22, 0);
+  hatCrown.position.set(0, 1.07, 0);
   const hatBand = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.12, 0.76), gold);
-  hatBand.position.set(0, 3.06, 0);
+  hatBand.position.set(0, 0.91, 0);
   const feather = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.42, 0.18), palette.getMat(0xef4444, 'gloss'));
-  feather.position.set(0.36, 3.32, -0.05);
+  feather.position.set(0.36, 1.17, -0.05);
   feather.rotation.z = -0.3;
-  body.add(hatBrim, hatCrown, hatBand, feather);
+  headGroup.add(hatBrim, hatCrown, hatBand, feather);
 
-  // Weapon tip custom material so active weapon changes Hero's blaster orb color dynamically
+  // Weapon tip custom material fallback
   const weaponTipMat = new THREE.MeshStandardMaterial({
     color: 0x4fd8ff,
     emissive: 0x4fd8ff,
@@ -242,23 +271,26 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
   });
 
   const weaponGroup = new THREE.Group();
+  const weaponMeshes = {} as Record<WeaponId, THREE.Group>;
   const makeArm = (x: number, withWeapon: boolean): THREE.Group => {
     const arm = new THREE.Group();
-    arm.position.set(x, 1.98, 0);
+    arm.position.set(x, 0.88, 0);
     const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 0.32), tunic);
     sleeve.position.y = -0.18;
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.42, 0.28), skin);
     hand.position.y = -0.56;
     arm.add(sleeve, hand);
     if (withWeapon) {
-      const gunBody = new THREE.Mesh(
-        new THREE.BoxGeometry(0.22, 0.24, 0.58),
-        palette.getMat(0x0ea5e9, 'metal'),
-      );
-      gunBody.position.set(0, -0.68, 0.26);
-      const gunTip = new THREE.Mesh(new THREE.OctahedronGeometry(0.15, 0), weaponTipMat);
-      gunTip.position.set(0, -0.68, 0.62);
-      weaponGroup.add(gunBody, gunTip);
+      // Orient +PI/2 around X inside arm so when arm aims forward (-PI/2 around X),
+      // weapon barrel (+Z) points straight forward and sights (+Y) stay upright!
+      weaponGroup.position.set(0, -0.72, 0.06);
+      weaponGroup.rotation.x = Math.PI / 2;
+      WEAPON_ORDER.forEach((wId) => {
+        const wMesh = createWeaponMesh(wId, palette, 0.92);
+        wMesh.visible = wId === 'ketapel';
+        weaponMeshes[wId] = wMesh;
+        weaponGroup.add(wMesh);
+      });
       arm.add(weaponGroup);
     }
     return arm;
@@ -266,7 +298,7 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
 
   const leftArm = makeArm(-0.62, false);
   const rightArm = makeArm(0.62, true);
-  body.add(leftArm, rightArm);
+  upperBody.add(leftArm, rightArm);
 
   // Dash / Pulse ring
   const dashRing = new THREE.Mesh(
@@ -283,13 +315,287 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
   dashRing.position.y = 0.08;
   root.add(dashRing);
 
-  return { root, body, leftLeg, rightLeg, leftArm, rightArm, dashRing, weaponGroup, weaponTipMat };
+  return {
+    root,
+    body,
+    upperBody,
+    headGroup,
+    leftEye,
+    rightEye,
+    leftLeg,
+    rightLeg,
+    leftArm,
+    rightArm,
+    dashRing,
+    weaponGroup,
+    weaponMeshes,
+    weaponTipMat,
+  };
 }
 
-export function setHeroWeaponVisual(rig: HeroAvatarRig, colorHex: number, owned: boolean): void {
+export function setHeroWeaponVisual(
+  rig: HeroAvatarRig,
+  weaponOrColorHex: WeaponId | number,
+  owned: boolean,
+): void {
   rig.weaponGroup.visible = owned;
-  rig.weaponTipMat.color.setHex(colorHex);
-  rig.weaponTipMat.emissive.setHex(colorHex);
+  if (typeof weaponOrColorHex === 'string') {
+    WEAPON_ORDER.forEach((id) => {
+      const m = rig.weaponMeshes[id];
+      if (m) m.visible = id === weaponOrColorHex;
+    });
+  } else {
+    rig.weaponTipMat.color.setHex(weaponOrColorHex);
+    rig.weaponTipMat.emissive.setHex(weaponOrColorHex);
+  }
+}
+
+export type WeaponPoseClass =
+  | 'pistol'
+  | 'handcannon'
+  | 'cqb_smg'
+  | 'rifle_twohand'
+  | 'heavy_gatling';
+
+export function getWeaponPoseClass(weaponId: WeaponId): WeaponPoseClass {
+  if (weaponId === 'ketapel') return 'pistol';
+  if (weaponId === 'emas') return 'handcannon';
+  if (weaponId === 'saus' || weaponId === 'kristal') return 'cqb_smg';
+  if (weaponId === 'jarum') return 'heavy_gatling';
+  return 'rifle_twohand'; // kerikil, biji, kertas
+}
+
+export interface HeroWeaponPoseInput {
+  speed: number;
+  walkCycle: number;
+  aimAlpha: number; // 0 = carry/ready stance, 1 = full aiming stance
+  recoil: number; // 0..1 kickback impulse right after shooting
+  dt: number;
+  elapsed?: number;
+  aimPitch?: number; // + = aiming up, - = aiming down
+}
+
+/**
+ * Smoothly animates legs, torso lean/twist, head counter-look, both arms,
+ * and weapon grip angle for distinct light, medium, sniper, and heavy weapons.
+ */
+export function applyHeroWeaponPose(
+  rig: HeroAvatarRig,
+  weaponId: WeaponId,
+  hasWeapon: boolean,
+  input: HeroWeaponPoseInput,
+): void {
+  const { speed, walkCycle, aimAlpha, recoil, dt, elapsed = 0, aimPitch = 0 } = input;
+  const clampedAimPitch = THREE.MathUtils.clamp(aimPitch, -0.58, 0.65);
+  const moving = speed > 0.6;
+  const swing = moving ? Math.sin(walkCycle) * 0.6 : 0;
+  const breathWave = Math.sin(elapsed * 2.5);
+  const breath = breathWave * 0.025;
+  const dampRate = Math.min(28, 18);
+
+  // Living Hero breathing squash-and-stretch (volume preserving, grounded at feet!)
+  const strideBounce = moving ? Math.abs(Math.sin(walkCycle)) * 0.048 : 0;
+  const targetBodySy = 1 + breathWave * 0.042 + strideBounce - recoil * 0.065;
+  const curBodySy = THREE.MathUtils.damp(rig.body.scale.y, targetBodySy, 16, dt);
+  const safeBodySy = Math.max(0.76, curBodySy);
+  const bodySxz = 1 / Math.sqrt(safeBodySy);
+  rig.body.scale.set(bodySxz, safeBodySy, bodySxz);
+
+  // Natural eye blinking on Hero
+  const blinkY = computeBlinkScale(elapsed, 0.25);
+  rig.leftEye.scale.y = blinkY;
+  rig.rightEye.scale.y = blinkY;
+
+  // Target leg & body height
+  let targetLeftLegX = moving ? swing : 0;
+  let targetRightLegX = moving ? -swing : 0;
+  let targetLeftLegZ = 0;
+  let targetRightLegZ = 0;
+  let targetBodyY = moving ? Math.abs(Math.sin(walkCycle)) * 0.12 : 0;
+
+  let targetUpperX = breath * 0.75;
+  let targetUpperY = !moving && aimAlpha < 0.35 ? Math.sin(elapsed * 1.15) * 0.045 : 0;
+  let targetHeadX = !moving && aimAlpha < 0.35 ? Math.sin(elapsed * 1.55) * 0.04 : 0;
+  let targetHeadY = !moving && aimAlpha < 0.35 ? Math.sin(elapsed * 0.85) * 0.14 : 0;
+  let targetHeadZ = !moving && aimAlpha < 0.35 ? Math.sin(elapsed * 1.05) * 0.025 : 0;
+
+  let targetRightArmX = moving ? swing * 0.55 : breathWave * 0.055;
+  let targetRightArmY = 0;
+  let targetRightArmZ = !moving ? 0.03 + breathWave * 0.015 : 0;
+
+  let targetLeftArmX = moving ? -swing * 0.65 : -breathWave * 0.055;
+  let targetLeftArmY = 0;
+  let targetLeftArmZ = !moving ? -0.03 - breathWave * 0.015 : 0;
+
+  let targetWeaponPosY = -0.72;
+  let targetWeaponPosZ = 0.06;
+  let targetWeaponRotY = 0;
+  let targetWeaponRotZ = 0;
+
+  if (hasWeapon) {
+    const cls = getWeaponPoseClass(weaponId);
+
+    if (cls === 'pistol') {
+      // Tactical Pistol: snappy one/two-hand transition
+      targetUpperY = THREE.MathUtils.lerp(-0.08, -0.18, aimAlpha);
+      targetHeadY = -targetUpperY * 0.9;
+      targetUpperX = aimAlpha * 0.04 - recoil * 0.06;
+
+      targetRightArmX = THREE.MathUtils.lerp(
+        moving ? -0.58 + swing * 0.22 : -0.64,
+        -1.56 - recoil * 0.34,
+        aimAlpha,
+      );
+      targetRightArmZ = THREE.MathUtils.lerp(-0.06, -0.14, aimAlpha);
+
+      // Left arm swings naturally while walking with pistol, or cups under right wrist when aiming!
+      targetLeftArmX = THREE.MathUtils.lerp(
+        moving ? -swing * 0.68 : 0.14,
+        -1.36 - recoil * 0.2,
+        aimAlpha,
+      );
+      targetLeftArmZ = THREE.MathUtils.lerp(0.04, 0.52, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(0, 0.14, aimAlpha);
+    } else if (cls === 'handcannon') {
+      // Golden Revolver: stylized gunslinger stance & strong muzzle flip recoil
+      targetUpperY = THREE.MathUtils.lerp(-0.22, -0.32, aimAlpha);
+      targetHeadY = -targetUpperY * 0.92;
+      targetUpperX = -recoil * 0.1;
+
+      targetRightArmX = THREE.MathUtils.lerp(
+        moving ? -0.75 + swing * 0.18 : -0.88,
+        -1.58 - recoil * 0.48,
+        aimAlpha,
+      );
+      targetRightArmZ = THREE.MathUtils.lerp(-0.1, -0.22, aimAlpha);
+
+      // Counterweight left arm swept behind hip when firing
+      targetLeftArmX = THREE.MathUtils.lerp(
+        moving ? -swing * 0.55 : 0.28,
+        0.46 + recoil * 0.18,
+        aimAlpha,
+      );
+      targetLeftArmZ = THREE.MathUtils.lerp(-0.08, -0.28, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(0.05, 0.24, aimAlpha);
+    } else if (cls === 'cqb_smg') {
+      // Drum SMG / Crystal Fang Blaster: tight two-hand CQB stance across chest
+      targetUpperY = THREE.MathUtils.lerp(-0.2, -0.28, aimAlpha);
+      targetHeadY = -targetUpperY * 0.92;
+      targetUpperX = THREE.MathUtils.lerp(0.06, 0.11 - recoil * 0.09, aimAlpha);
+
+      targetRightArmX = THREE.MathUtils.lerp(
+        -0.96 + (moving ? swing * 0.12 : 0),
+        -1.46 - recoil * 0.16,
+        aimAlpha,
+      );
+      targetRightArmZ = THREE.MathUtils.lerp(-0.2, -0.24, aimAlpha);
+      targetRightArmY = THREE.MathUtils.lerp(0.14, 0.18, aimAlpha);
+
+      targetLeftArmX = THREE.MathUtils.lerp(
+        -0.9 + (moving ? -swing * 0.1 : 0),
+        -1.4 - recoil * 0.14,
+        aimAlpha,
+      );
+      targetLeftArmZ = THREE.MathUtils.lerp(0.46, 0.54, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(0.22, 0.28, aimAlpha);
+      targetWeaponPosZ = 0.08;
+    } else if (cls === 'rifle_twohand') {
+      // Combat Shotgun / Precision Sniper / Sky Railgun: shoulder-mounted two-handed shooter stance!
+      targetUpperY = THREE.MathUtils.lerp(-0.34, -0.44, aimAlpha);
+      targetHeadY = -targetUpperY * 0.94;
+      targetHeadZ = aimAlpha * 0.08;
+      targetHeadX = aimAlpha * 0.06;
+      targetUpperX = THREE.MathUtils.lerp(0.04, 0.09 - recoil * 0.14, aimAlpha);
+
+      targetRightArmX = THREE.MathUtils.lerp(
+        -0.82 + (moving ? swing * 0.1 : 0),
+        -1.52 - recoil * 0.24,
+        aimAlpha,
+      );
+      targetRightArmZ = THREE.MathUtils.lerp(-0.22, -0.26, aimAlpha);
+      targetRightArmY = THREE.MathUtils.lerp(0.18, 0.22, aimAlpha);
+
+      targetLeftArmX = THREE.MathUtils.lerp(
+        -0.98 + (moving ? -swing * 0.1 : 0),
+        -1.46 - recoil * 0.18,
+        aimAlpha,
+      );
+      targetLeftArmZ = THREE.MathUtils.lerp(0.48, 0.58, aimAlpha);
+      targetLeftArmY = -0.15;
+
+      targetWeaponRotY = THREE.MathUtils.lerp(0.26, 0.34, aimAlpha);
+      targetWeaponPosY = -0.68;
+      targetWeaponPosZ = 0.08;
+
+      if (!moving && aimAlpha > 0.3) {
+        targetLeftLegZ = -0.1 * aimAlpha;
+        targetRightLegZ = 0.1 * aimAlpha;
+        targetLeftLegX = -0.16 * aimAlpha;
+        targetRightLegX = 0.18 * aimAlpha;
+      }
+    } else {
+      // Heavy Triple-Barrel Gatling ('jarum'): low braced hip-carry, left hand gripping top carry bar!
+      targetUpperY = THREE.MathUtils.lerp(-0.22, -0.28, aimAlpha);
+      targetHeadY = -targetUpperY * 0.9;
+      targetUpperX = THREE.MathUtils.lerp(-0.08, -0.15 - recoil * 0.1, aimAlpha);
+
+      targetRightArmX = THREE.MathUtils.lerp(
+        -0.52 + (moving ? swing * 0.1 : 0),
+        -1.15 - recoil * 0.16,
+        aimAlpha,
+      );
+      targetRightArmZ = -0.18;
+
+      targetLeftArmX = THREE.MathUtils.lerp(
+        -0.98 + (moving ? -swing * 0.08 : 0),
+        -1.26 - recoil * 0.14,
+        aimAlpha,
+      );
+      targetLeftArmZ = THREE.MathUtils.lerp(0.46, 0.56, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(0.18, 0.24, aimAlpha);
+      targetWeaponPosY = -0.76;
+
+      if (!moving) {
+        targetLeftLegZ = -0.12;
+        targetRightLegZ = 0.12;
+      }
+    }
+    // Apply vertical crosshair aim pitch across torso, head, and weapon arms!
+    if (aimAlpha > 0.02 && Math.abs(clampedAimPitch) > 0.005) {
+      const pitchShift = clampedAimPitch * aimAlpha;
+      targetRightArmX -= pitchShift;
+      if (cls !== 'handcannon') {
+        targetLeftArmX -= pitchShift;
+      }
+      targetHeadX -= pitchShift * 0.68;
+      targetUpperX -= pitchShift * 0.24;
+    }
+  }
+
+  rig.leftLeg.rotation.x = THREE.MathUtils.damp(rig.leftLeg.rotation.x, targetLeftLegX, dampRate, dt);
+  rig.rightLeg.rotation.x = THREE.MathUtils.damp(rig.rightLeg.rotation.x, targetRightLegX, dampRate, dt);
+  rig.leftLeg.rotation.z = THREE.MathUtils.damp(rig.leftLeg.rotation.z, targetLeftLegZ, dampRate, dt);
+  rig.rightLeg.rotation.z = THREE.MathUtils.damp(rig.rightLeg.rotation.z, targetRightLegZ, dampRate, dt);
+  rig.body.position.y = THREE.MathUtils.damp(rig.body.position.y, targetBodyY, dampRate, dt);
+
+  rig.upperBody.rotation.x = THREE.MathUtils.damp(rig.upperBody.rotation.x, targetUpperX, dampRate, dt);
+  rig.upperBody.rotation.y = THREE.MathUtils.damp(rig.upperBody.rotation.y, targetUpperY, dampRate, dt);
+  rig.headGroup.rotation.x = THREE.MathUtils.damp(rig.headGroup.rotation.x, targetHeadX, dampRate, dt);
+  rig.headGroup.rotation.y = THREE.MathUtils.damp(rig.headGroup.rotation.y, targetHeadY, dampRate, dt);
+  rig.headGroup.rotation.z = THREE.MathUtils.damp(rig.headGroup.rotation.z, targetHeadZ, dampRate, dt);
+
+  rig.rightArm.rotation.x = THREE.MathUtils.damp(rig.rightArm.rotation.x, targetRightArmX, 24, dt);
+  rig.rightArm.rotation.y = THREE.MathUtils.damp(rig.rightArm.rotation.y, targetRightArmY, 24, dt);
+  rig.rightArm.rotation.z = THREE.MathUtils.damp(rig.rightArm.rotation.z, targetRightArmZ, 24, dt);
+
+  rig.leftArm.rotation.x = THREE.MathUtils.damp(rig.leftArm.rotation.x, targetLeftArmX, 24, dt);
+  rig.leftArm.rotation.y = THREE.MathUtils.damp(rig.leftArm.rotation.y, targetLeftArmY, 24, dt);
+  rig.leftArm.rotation.z = THREE.MathUtils.damp(rig.leftArm.rotation.z, targetLeftArmZ, 24, dt);
+
+  rig.weaponGroup.position.y = THREE.MathUtils.damp(rig.weaponGroup.position.y, targetWeaponPosY, dampRate, dt);
+  rig.weaponGroup.position.z = THREE.MathUtils.damp(rig.weaponGroup.position.z, targetWeaponPosZ, dampRate, dt);
+  rig.weaponGroup.rotation.y = THREE.MathUtils.damp(rig.weaponGroup.rotation.y, targetWeaponRotY, dampRate, dt);
+  rig.weaponGroup.rotation.z = THREE.MathUtils.damp(rig.weaponGroup.rotation.z, targetWeaponRotZ, dampRate, dt);
 }
 
 // 2. Flying 3D Owl Messenger for Opening Story
@@ -337,7 +643,7 @@ export function createOwlMessengerRig(palette: MaterialPalette): OwlMessengerRig
   envelope.add(paper, seal);
   root.add(envelope);
 
-  return { root, leftWing, rightWing, envelope };
+  return { root, leftWing, rightWing, leftEye: eyeL, rightEye: eyeR, envelope };
 }
 
 // 3. Starter Weapon Pickup in Hutan Kata Grass
@@ -369,37 +675,96 @@ export function createStarterWeaponPickup(palette: MaterialPalette): THREE.Group
   beacon.userData.animBeacon = true;
 
   const orb = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.62, 0),
+    new THREE.OctahedronGeometry(0.55, 0),
     palette.getMat(0x4fd8ff, 'emissive'),
   );
-  orb.position.y = 1.45;
+  orb.position.y = 1.08;
   orb.userData.animOrb = true;
 
-  const gun = new THREE.Mesh(
-    new THREE.BoxGeometry(0.32, 0.32, 0.9),
-    palette.getMat(0xfbbf24, 'metal'),
-  );
-  gun.position.y = 1.45;
-  gun.rotation.y = 0.6;
+  const gun = createWeaponMesh('ketapel', palette, 1.55);
+  gun.position.set(0, 1.78, 0);
+  gun.rotation.set(0.16, 0.6, 0.12);
+  gun.userData.animOrb = true;
 
   const topDiamond = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.34, 0),
+    new THREE.OctahedronGeometry(0.32, 0),
     palette.getMat(0xfacc15, 'emissive'),
   );
-  topDiamond.position.y = 3.1;
+  topDiamond.position.y = 3.2;
   topDiamond.userData.animOrb = true;
 
   group.add(basePad, baseRing, beacon, orb, gun, topDiamond);
   return group;
 }
 
-// 4. All Distinct Zone, Story, and Academy Examiner 3D NPCs
+export interface ZoneNpcRig {
+  bodyPivot: THREE.Group;
+  upperBody: THREE.Group;
+  headGroup: THREE.Group;
+  leftEye: THREE.Mesh;
+  rightEye: THREE.Mesh;
+  leftArm: THREE.Group;
+  rightArm: THREE.Group;
+  leftLeg: THREE.Group;
+  rightLeg: THREE.Group;
+  tailPivot?: THREE.Group;
+  propSpin?: THREE.Object3D;
+  baseRightArmX: number;
+  baseLeftArmX: number;
+}
+
+export interface MonsterAnimRig {
+  type: MonsterType;
+  bodyPivot: THREE.Group;
+  upperBody?: THREE.Group;
+  headGroup?: THREE.Group;
+  eyes?: THREE.Object3D[];
+  leftArm?: THREE.Group;
+  rightArm?: THREE.Group;
+  legs?: THREE.Group[];
+  leftWing?: THREE.Group;
+  rightWing?: THREE.Group;
+  weaponGroup?: THREE.Group;
+  extraSpin?: THREE.Object3D;
+}
+
+export interface ShooterAnimRig {
+  bodyPivot: THREE.Group;
+  upperBody: THREE.Group;
+  headGroup: THREE.Group;
+  visor: THREE.Mesh;
+  leftLeg: THREE.Group;
+  rightLeg: THREE.Group;
+  leftArm: THREE.Group;
+  rightArm: THREE.Group;
+  weaponGroup: THREE.Group;
+}
+
+export interface CaptiveAnimRig {
+  bodyPivot: THREE.Group;
+  headGroup?: THREE.Group;
+  leftEye?: THREE.Mesh;
+  rightEye?: THREE.Mesh;
+  leftArm?: THREE.Group;
+  rightArm?: THREE.Group;
+  tailPivot?: THREE.Group;
+  halo?: THREE.Object3D;
+}
+
+// 4. All Distinct Zone, Story, and Academy Examiner 3D NPCs (Jointed Arms, Hands & Living Rig)
 export function createZoneNpc(npcId: string, palette: MaterialPalette): THREE.Group {
   const root = new THREE.Group();
   addShadow(root, palette, 1.0);
 
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
   const skin = palette.getMat(0xfed7aa, 'matte');
+  const foxFur = palette.getMat(0xf97316, 'matte');
+  const handMat = npcId === 'npc_rubah' ? foxFur : npcId === 'npc_penjaga' ? palette.getMat(0x94a3b8, 'metal') : skin;
   const eyeMat = palette.getMat(0x0f172a, 'gloss');
+  const darkPants = palette.getMat(0x1e293b, 'matte');
+  const bootMat = palette.getMat(0x451a03, 'matte');
 
   let robeColor = 0xb45309;
   if (npcId === 'npc_koki') robeColor = 0xf8fafc;
@@ -414,112 +779,337 @@ export function createZoneNpc(npcId: string, palette: MaterialPalette): THREE.Gr
   else if (npcId === 'npc_raja_penguji' || npcId === 'npc_raja') robeColor = 0x6d28d9;
   else if (npcId === 'npc_exit_academy') robeColor = 0x0891b2;
 
-  const lower = new THREE.Mesh(
-    new THREE.BoxGeometry(0.95, 1.05, 0.72),
-    palette.getMat(robeColor, 'matte'),
-  );
-  lower.position.y = 0.52;
-  lower.castShadow = true;
-  root.add(lower);
+  const robeMat = palette.getMat(robeColor, npcId === 'npc_penjaga' ? 'metal' : 'matte');
 
-  const torso = new THREE.Mesh(
-    new THREE.BoxGeometry(1.0, 1.0, 0.68),
-    palette.getMat(robeColor, npcId === 'npc_penjaga' ? 'metal' : 'matte'),
+  // Grounded Legs + Boots
+  const makeLeg = (lx: number): THREE.Group => {
+    const leg = new THREE.Group();
+    leg.position.set(lx, 0.9, 0);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.56, 0.34), darkPants);
+    thigh.position.y = -0.28;
+    thigh.castShadow = true;
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.34, 0.44), bootMat);
+    boot.position.set(0, -0.73, 0.04);
+    boot.castShadow = true;
+    leg.add(thigh, boot);
+    return leg;
+  };
+  const leftLeg = makeLeg(-0.22);
+  const rightLeg = makeLeg(0.22);
+  bodyPivot.add(leftLeg, rightLeg);
+
+  // Tunic / Robe Skirt hem overlapping upper legs cleanly
+  const lowerRobe = new THREE.Mesh(
+    new THREE.BoxGeometry(0.92, 0.62, 0.64),
+    robeMat,
   );
-  torso.position.y = 1.5;
+  lowerRobe.position.y = 0.72;
+  lowerRobe.castShadow = true;
+  bodyPivot.add(lowerRobe);
+
+  const upperBody = new THREE.Group();
+  upperBody.position.set(0, 0.96, 0);
+  bodyPivot.add(upperBody);
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.98, 0.62), robeMat);
+  torso.position.y = 0.52;
   torso.castShadow = true;
-  root.add(torso);
-
-  const head = new THREE.Mesh(
-    new THREE.BoxGeometry(0.84, 0.84, 0.82),
-    npcId === 'npc_rubah' ? palette.getMat(0xf97316, 'matte') : skin,
+  const sash = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 0.16, 0.66),
+    palette.getMat(npcId === 'npc_raja' || npcId === 'npc_raja_penguji' ? 0xfbbf24 : 0x78350f, 'metal'),
   );
-  head.position.y = 2.45;
-  head.castShadow = true;
-  root.add(head);
+  sash.position.y = 0.14;
+  upperBody.add(torso, sash);
 
+  // Neck + Head Group
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.06, 0);
+  upperBody.add(headGroup);
+
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.42), npcId === 'npc_rubah' ? foxFur : skin);
+  neck.position.y = 0.04;
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.84, 0.82, 0.8),
+    npcId === 'npc_rubah' ? foxFur : skin,
+  );
+  head.position.y = 0.46;
+  head.castShadow = true;
   const lEye = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.15, 0.06), eyeMat);
-  lEye.position.set(-0.2, 2.48, 0.42);
+  lEye.position.set(-0.2, 0.48, 0.41);
   const rEye = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.15, 0.06), eyeMat);
-  rEye.position.set(0.2, 2.48, 0.42);
-  root.add(lEye, rEye);
+  rEye.position.set(0.2, 0.48, 0.41);
+  const browMat = palette.getMat(npcId === 'npc_tetua' ? 0xf8fafc : 0x334155, 'matte');
+  const lBrow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 0.05), browMat);
+  lBrow.position.set(-0.2, 0.6, 0.41);
+  const rBrow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 0.05), browMat);
+  rBrow.position.set(0.2, 0.6, 0.41);
+  headGroup.add(neck, head, lEye, rEye, lBrow, rBrow);
+
+  // Full Proportionate Articulated Arms + Visible Hands (no tiny/cut-off arms!)
+  const makeNpcArm = (ax: number): THREE.Group => {
+    const arm = new THREE.Group();
+    arm.position.set(ax, 0.9, 0);
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.36), robeMat);
+    shoulder.position.y = -0.18;
+    shoulder.castShadow = true;
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.32, 0.3), robeMat);
+    forearm.position.y = -0.48;
+    forearm.castShadow = true;
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.24, 0.26), handMat);
+    hand.position.y = -0.7;
+    hand.castShadow = true;
+    arm.add(shoulder, forearm, hand);
+    return arm;
+  };
+  const leftArm = makeNpcArm(-0.64);
+  const rightArm = makeNpcArm(0.64);
+  upperBody.add(leftArm, rightArm);
+
+  let tailPivot: THREE.Group | undefined;
+  let propSpin: THREE.Object3D | undefined;
+  let baseRightArmX = -0.22;
+  let baseLeftArmX = 0.06;
 
   if (npcId === 'npc_tetua') {
     const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.78, 0.12, 12), palette.getMat(0x92400e, 'matte'));
-    brim.position.y = 2.9;
-    const crown = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.35, 0.66), palette.getMat(0xb45309, 'matte'));
-    crown.position.y = 3.12;
-    const beard = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.55, 0.25), palette.getMat(0xf8fafc, 'matte'));
-    beard.position.set(0, 2.08, 0.36);
-    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8), palette.getMat(0x78350f, 'matte'));
-    staff.position.set(0.72, 1.3, 0.25);
-    root.add(brim, crown, beard, staff);
+    brim.position.y = 0.88;
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.34, 0.68), palette.getMat(0xb45309, 'matte'));
+    crown.position.y = 1.1;
+    const beard = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.46, 0.22), palette.getMat(0xf8fafc, 'matte'));
+    beard.position.set(0, 0.18, 0.38);
+    headGroup.add(brim, crown, beard);
+
+    // Carved Wooden Staff held directly inside Right Hand!
+    const staffGroup = new THREE.Group();
+    staffGroup.position.set(0, -0.7, 0.12);
+    staffGroup.rotation.x = 0.36;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 2.35, 8), palette.getMat(0x78350f, 'matte'));
+    shaft.position.y = 0.45;
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), palette.getMat(0xfacc15, 'emissive'));
+    gem.position.y = 1.72;
+    staffGroup.add(shaft, gem);
+    rightArm.add(staffGroup);
+    propSpin = gem;
+    baseRightArmX = -0.45;
   } else if (npcId === 'npc_koki') {
-    const chefHat = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 0.65, 10), palette.getMat(0xffffff, 'matte'));
-    chefHat.position.y = 3.15;
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(0.78, 1.1, 0.1), palette.getMat(0xffffff, 'matte'));
-    apron.position.set(0, 1.1, 0.38);
-    const ladle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 6), palette.getMat(0x92400e, 'matte'));
-    ladle.position.set(0.68, 1.5, 0.35);
-    ladle.rotation.z = -0.35;
-    root.add(chefHat, apron, ladle);
+    const chefHatBase = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.4, 0.34, 12), palette.getMat(0xffffff, 'matte'));
+    chefHatBase.position.y = 1.02;
+    const chefPuff = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.42, 0.74), palette.getMat(0xffffff, 'matte'));
+    chefPuff.position.y = 1.32;
+    headGroup.add(chefHatBase, chefPuff);
+
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(0.78, 1.02, 0.1), palette.getMat(0xffffff, 'matte'));
+    apron.position.set(0, 0.25, 0.34);
+    upperBody.add(apron);
+
+    // Soup Ladle in Right Hand + Serving Pan in Left Hand
+    const ladle = new THREE.Group();
+    ladle.position.set(0, -0.7, 0.14);
+    ladle.rotation.x = 0.65;
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.15, 6), palette.getMat(0x92400e, 'matte'));
+    handle.position.y = 0.35;
+    const scoop = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 0.16, 8), palette.getMat(0x94a3b8, 'metal'));
+    scoop.position.y = 0.95;
+    ladle.add(handle, scoop);
+    rightArm.add(ladle);
+
+    const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.08, 10), palette.getMat(0xd97706, 'metal'));
+    tray.position.set(0, -0.74, 0.2);
+    leftArm.add(tray);
+    baseRightArmX = -0.68;
+    baseLeftArmX = -0.48;
   } else if (npcId === 'npc_penjaga') {
-    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.42, 0.9), palette.getMat(0x94a3b8, 'metal'));
-    helmet.position.y = 2.95;
-    const plume = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.42, 0.55), palette.getMat(0xef4444, 'gloss'));
-    plume.position.set(0, 3.3, -0.05);
-    const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.4, 6), palette.getMat(0x78350f, 'matte'));
-    spear.position.set(0.72, 1.7, 0.2);
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.45, 4), palette.getMat(0xfbbf24, 'metal'));
-    tip.position.set(0.72, 3.55, 0.2);
-    root.add(helmet, plume, spear, tip);
+    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.42, 0.88), palette.getMat(0x94a3b8, 'metal'));
+    helmet.position.y = 0.92;
+    const plume = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.4, 0.56), palette.getMat(0xef4444, 'gloss'));
+    plume.position.set(0, 1.26, -0.04);
+    headGroup.add(helmet, plume);
+
+    // Royal Halberd held in Right Hand + Shield mounted on Left Forearm
+    const spearGroup = new THREE.Group();
+    spearGroup.position.set(0, -0.68, 0.1);
+    spearGroup.rotation.x = 0.22;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.9, 6), palette.getMat(0x78350f, 'matte'));
+    pole.position.y = 0.65;
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 4), palette.getMat(0xfbbf24, 'metal'));
+    tip.position.y = 2.25;
+    spearGroup.add(pole, tip);
+    rightArm.add(spearGroup);
+
+    const shield = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.82, 0.62), palette.getMat(0x1e40af, 'metal'));
+    shield.position.set(-0.2, -0.45, 0.08);
+    const shieldRim = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.36, 0.36), palette.getMat(0xfbbf24, 'metal'));
+    shieldRim.position.set(-0.2, -0.45, 0.08);
+    leftArm.add(shield, shieldRim);
+    baseRightArmX = -0.35;
+    baseLeftArmX = -0.38;
   } else if (npcId === 'npc_penyihir') {
-    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.88, 0.12, 12), palette.getMat(0x1e1b4b, 'gloss'));
-    hatBrim.position.y = 2.9;
-    const hatCone = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.15, 8), palette.getMat(0x312e81, 'gloss'));
-    hatCone.position.y = 3.5;
-    const hourglass = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), palette.getMat(0xfacc15, 'emissive'));
-    hourglass.position.set(0.72, 1.85, 0.4);
-    root.add(hatBrim, hatCone, hourglass);
+    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.84, 0.86, 0.12, 12), palette.getMat(0x1e1b4b, 'gloss'));
+    hatBrim.position.y = 0.9;
+    const hatCone = new THREE.Mesh(new THREE.ConeGeometry(0.54, 1.1, 8), palette.getMat(0x312e81, 'gloss'));
+    hatCone.position.y = 1.48;
+    headGroup.add(hatBrim, hatCone);
+
+    // Luminous Time Hourglass crystal held above Right Hand
+    const hg = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), palette.getMat(0xfacc15, 'emissive'));
+    hg.position.set(0, -0.72, 0.26);
+    rightArm.add(hg);
+    propSpin = hg;
+    baseRightArmX = -0.82;
   } else if (npcId === 'npc_rubah') {
-    const earL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.4, 0.2), palette.getMat(0xea580c, 'matte'));
-    earL.position.set(-0.28, 3.05, 0);
-    const earR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.4, 0.2), palette.getMat(0xea580c, 'matte'));
-    earR.position.set(0.28, 3.05, 0);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.55, 0.9), palette.getMat(0xf97316, 'matte'));
-    tail.position.set(0, 0.95, -0.75);
-    const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.24, 0.72), palette.getMat(0x16a34a, 'matte'));
-    scarf.position.y = 2.02;
-    root.add(earL, earR, tail, scarf);
+    const earL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.38, 0.18), palette.getMat(0xea580c, 'matte'));
+    earL.position.set(-0.26, 0.98, 0);
+    const earR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.38, 0.18), palette.getMat(0xea580c, 'matte'));
+    earR.position.set(0.26, 0.98, 0);
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.24, 0.28), palette.getMat(0xfef3c7, 'matte'));
+    snout.position.set(0, 0.34, 0.44);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.1), eyeMat);
+    nose.position.set(0, 0.4, 0.58);
+    headGroup.add(earL, earR, snout, nose);
+
+    const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.22, 0.72), palette.getMat(0x16a34a, 'matte'));
+    scarf.position.y = 0.95;
+    upperBody.add(scarf);
+
+    tailPivot = new THREE.Group();
+    tailPivot.position.set(0, 0.08, -0.32);
+    const tailMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.44, 0.85), foxFur);
+    tailMesh.position.set(0, 0.12, -0.4);
+    const tailTip = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.26), palette.getMat(0xf8fafc, 'matte'));
+    tailTip.position.set(0, 0.14, -0.86);
+    tailPivot.add(tailMesh, tailTip);
+    upperBody.add(tailPivot);
+    baseRightArmX = -0.3;
+    baseLeftArmX = -0.2;
   } else if (npcId === 'npc_portal') {
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.55, 0.95), palette.getMat(0x7c3aed, 'gloss'));
-    hood.position.y = 2.85;
-    const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), palette.getMat(0xe879f9, 'emissive'));
-    orb.position.set(-0.72, 2.2, 0.45);
-    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), palette.getMat(0x4c1d95, 'metal'));
-    staff.position.set(-0.72, 1.1, 0.45);
-    root.add(hood, orb, staff);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.52, 0.92), palette.getMat(0x7c3aed, 'gloss'));
+    hood.position.y = 0.82;
+    headGroup.add(hood);
+
+    const staffGroup = new THREE.Group();
+    staffGroup.position.set(0, -0.7, 0.12);
+    staffGroup.rotation.x = 0.32;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.25, 6), palette.getMat(0x4c1d95, 'metal'));
+    shaft.position.y = 0.45;
+    const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), palette.getMat(0xe879f9, 'emissive'));
+    orb.position.y = 1.68;
+    staffGroup.add(shaft, orb);
+    leftArm.add(staffGroup);
+    propSpin = orb;
+    baseLeftArmX = -0.45;
   } else if (npcId === 'npc_raja_penguji' || npcId === 'npc_raja') {
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.44, 0.42, 6), palette.getMat(0xfbbf24, 'metal'));
-    crown.position.y = 3.08;
-    const cape = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.75, 0.16), palette.getMat(0x991b1b, 'matte'));
-    cape.position.set(0, 1.15, -0.45);
-    const scepter = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), palette.getMat(0xfbbf24, 'metal'));
-    scepter.position.set(0.72, 1.3, 0.25);
-    root.add(crown, cape, scepter);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.42, 0.38, 6), palette.getMat(0xfbbf24, 'metal'));
+    crown.position.y = 1.04;
+    headGroup.add(crown);
+
+    const cape = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.55, 0.14), palette.getMat(0x991b1b, 'matte'));
+    cape.position.set(0, 0.24, -0.38);
+    upperBody.add(cape);
+
+    const scepterGroup = new THREE.Group();
+    scepterGroup.position.set(0, -0.7, 0.14);
+    scepterGroup.rotation.x = 0.42;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.0, 6), palette.getMat(0xfbbf24, 'metal'));
+    shaft.position.y = 0.4;
+    const ruby = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), palette.getMat(0xef4444, 'emissive'));
+    ruby.position.y = 1.48;
+    scepterGroup.add(shaft, ruby);
+    rightArm.add(scepterGroup);
+    propSpin = ruby;
+    baseRightArmX = -0.48;
   } else {
     // Examiners (Sera, Bima, Ayu, Rangga) & Penjaga Portal
     const cap = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.14, 1.02), palette.getMat(0x1e293b, 'gloss'));
-    cap.position.y = 2.94;
-    const book = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.14), palette.getMat(0xfbbf24, 'gloss'));
-    book.position.set(0.68, 1.55, 0.28);
-    root.add(cap, book);
+    cap.position.y = 0.92;
+    const tassel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), palette.getMat(0xfacc15, 'metal'));
+    tassel.position.set(0.46, 0.78, 0.25);
+    headGroup.add(cap, tassel);
+
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.16), palette.getMat(0xfbbf24, 'gloss'));
+    book.position.set(-0.08, -0.7, 0.2);
+    book.rotation.set(0.4, 0.3, 0);
+    rightArm.add(book);
+    baseRightArmX = -0.62;
   }
 
+  const npcRig: ZoneNpcRig = {
+    bodyPivot,
+    upperBody,
+    headGroup,
+    leftEye: lEye,
+    rightEye: rEye,
+    leftArm,
+    rightArm,
+    leftLeg,
+    rightLeg,
+    tailPivot,
+    propSpin,
+    baseRightArmX,
+    baseLeftArmX,
+  };
+  root.userData.npcRig = npcRig;
   return root;
 }
 
-// 5. 5 Distinct 3D Word Monsters + Armed Shooter Enemy
+export function animateZoneNpc(
+  mesh: THREE.Object3D,
+  elapsed: number,
+  phase: number,
+  isNearHero = false,
+  dt = 0.016,
+): void {
+  const rig = mesh.userData.npcRig as ZoneNpcRig | undefined;
+  if (!rig) return;
+
+  // Living breathing squash-and-stretch (volume preserving, feet stay flush at y=0!)
+  const breath = Math.sin(elapsed * 2.4 + phase);
+  const sy = 1 + breath * 0.036;
+  const sxz = 1 / Math.sqrt(sy);
+  rig.bodyPivot.scale.set(sxz, sy, sxz);
+
+  const blinkY = computeBlinkScale(elapsed, phase + 0.8);
+  rig.leftEye.scale.y = blinkY;
+  rig.rightEye.scale.y = blinkY;
+
+  const sway = Math.sin(elapsed * 1.4 + phase) * 0.035;
+  rig.upperBody.rotation.z = sway * 0.5;
+  rig.upperBody.rotation.x = THREE.MathUtils.damp(
+    rig.upperBody.rotation.x,
+    isNearHero ? 0.08 : Math.sin(elapsed * 2.4 + phase) * 0.03,
+    10,
+    dt,
+  );
+
+  // Subtle head curiosity & friendly nod
+  const targetHeadY = Math.sin(elapsed * 0.95 + phase * 1.7) * (isNearHero ? 0.14 : 0.28);
+  const targetHeadX = isNearHero
+    ? -0.06 + Math.sin(elapsed * 3.8 + phase) * 0.06
+    : Math.sin(elapsed * 1.7 + phase) * 0.04;
+  rig.headGroup.rotation.y = THREE.MathUtils.damp(rig.headGroup.rotation.y, targetHeadY, 8, dt);
+  rig.headGroup.rotation.x = THREE.MathUtils.damp(rig.headGroup.rotation.x, targetHeadX, 8, dt);
+
+  // Arms gently gesture & wave when Hero approaches
+  const targetRightX = isNearHero
+    ? rig.baseRightArmX - 0.35 + Math.sin(elapsed * 5.2) * 0.18
+    : rig.baseRightArmX + Math.sin(elapsed * 2.1 + phase) * 0.08;
+  const targetLeftX = isNearHero
+    ? -0.95 + Math.sin(elapsed * 6.5) * 0.25
+    : rig.baseLeftArmX - Math.sin(elapsed * 2.1 + phase) * 0.08;
+  const targetLeftZ = isNearHero ? 0.24 : 0.05;
+
+  rig.rightArm.rotation.x = THREE.MathUtils.damp(rig.rightArm.rotation.x, targetRightX, 10, dt);
+  rig.leftArm.rotation.x = THREE.MathUtils.damp(rig.leftArm.rotation.x, targetLeftX, 10, dt);
+  rig.leftArm.rotation.z = THREE.MathUtils.damp(rig.leftArm.rotation.z, targetLeftZ, 10, dt);
+
+  if (rig.tailPivot) {
+    rig.tailPivot.rotation.y = Math.sin(elapsed * 6.2 + phase) * 0.35;
+  }
+  if (rig.propSpin) {
+    rig.propSpin.rotation.y += dt * 2.2;
+  }
+}
+
+// 5. 5 Distinct 3D Word Monsters + Armed Bosses with Living Articulated Rigs
 export function createMonsterMesh(
   type: MonsterType,
   palette: MaterialPalette,
@@ -528,150 +1118,323 @@ export function createMonsterMesh(
   const root = new THREE.Group();
   addShadow(root, palette, 1.05);
 
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
+  const rig: MonsterAnimRig = { type, bodyPivot };
+
   if (type === 'gumpal_salam') {
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(1.5, 1.25, 1.45),
-      palette.getMat(0xf97316, 'gloss'),
-    );
-    body.position.y = 0.7;
+    const orange = palette.getMat(0xf97316, 'gloss');
+    const lightOrange = palette.getMat(0xfb923c, 'gloss');
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.25, 1.45), orange);
+    body.position.y = 0.65;
     body.castShadow = true;
-    const topDrop = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 0.45, 0.9),
-      palette.getMat(0xfb923c, 'gloss'),
-    );
-    topDrop.position.y = 1.45;
+    const topDrop = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 0.9), lightOrange);
+    topDrop.position.y = 1.42;
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.12), palette.getMat(0xfef08a, 'emissive'));
-    eyeL.position.set(-0.32, 0.85, 0.74);
+    eyeL.position.set(-0.32, 0.82, 0.74);
     const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.12), palette.getMat(0xfef08a, 'emissive'));
-    eyeR.position.set(0.32, 0.85, 0.74);
-    root.add(body, topDrop, eyeL, eyeR);
+    eyeR.position.set(0.32, 0.82, 0.74);
+
+    // Expressive bouncy Slime/Gumpal arms
+    const makeSlimeArm = (ax: number): THREE.Group => {
+      const arm = new THREE.Group();
+      arm.position.set(ax, 0.85, 0.08);
+      const nub = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.56, 0.34), lightOrange);
+      nub.position.y = -0.22;
+      nub.castShadow = true;
+      arm.add(nub);
+      return arm;
+    };
+    const leftArm = makeSlimeArm(-0.88);
+    const rightArm = makeSlimeArm(0.88);
+    bodyPivot.add(body, topDrop, eyeL, eyeR, leftArm, rightArm);
+    rig.leftArm = leftArm;
+    rig.rightArm = rightArm;
+    rig.eyes = [eyeL, eyeR];
+    rig.extraSpin = topDrop;
   } else if (type === 'bayangan_kata') {
-    const cloak = new THREE.Mesh(
-      new THREE.ConeGeometry(0.85, 1.7, 6),
-      palette.getMat(0x4c1d95, 'gloss'),
-    );
-    cloak.position.y = 1.1;
+    const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.68, 6), palette.getMat(0x4c1d95, 'gloss'));
+    cloak.position.y = 0.92;
     cloak.castShadow = true;
-    const hood = new THREE.Mesh(
-      new THREE.BoxGeometry(0.92, 0.85, 0.92),
-      palette.getMat(0x5b21b6, 'gloss'),
-    );
-    hood.position.y = 1.9;
-    const eye = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.24, 0),
-      palette.getMat(0xf43f5e, 'emissive'),
-    );
-    eye.position.set(0, 1.85, 0.48);
-    root.add(cloak, hood, eye);
+    const upperBody = new THREE.Group();
+    upperBody.position.set(0, 1.15, 0);
+    bodyPivot.add(cloak, upperBody);
+
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.65, 0);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.85, 0.92), palette.getMat(0x5b21b6, 'gloss'));
+    hood.position.y = 0.2;
+    const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), palette.getMat(0xf43f5e, 'emissive'));
+    eye.position.set(0, 0.18, 0.48);
+    headGroup.add(hood, eye);
+    upperBody.add(headGroup);
+
+    const clawMat = palette.getMat(0x3b0764, 'gloss');
+    const glowMat = palette.getMat(0xe879f9, 'emissive');
+    const makeWraithArm = (ax: number, withWand: boolean): THREE.Group => {
+      const arm = new THREE.Group();
+      arm.position.set(ax, 0.52, 0);
+      const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.52, 0.3), cloak.material as THREE.Material);
+      sleeve.position.y = -0.22;
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.26), clawMat);
+      hand.position.y = -0.58;
+      arm.add(sleeve, hand);
+      if (withWand) {
+        const wGroup = new THREE.Group();
+        wGroup.position.set(0, -0.68, 0.1);
+        wGroup.rotation.x = Math.PI / 2;
+        const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.35, 6), clawMat);
+        staff.rotation.x = Math.PI / 2;
+        staff.position.z = 0.45;
+        const tip = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glowMat);
+        tip.position.z = 1.18;
+        wGroup.add(staff, tip);
+        arm.add(wGroup);
+        rig.weaponGroup = wGroup;
+      }
+      return arm;
+    };
+    const leftArm = makeWraithArm(-0.68, false);
+    const rightArm = makeWraithArm(0.68, true);
+    upperBody.add(leftArm, rightArm);
+    rig.upperBody = upperBody;
+    rig.headGroup = headGroup;
+    rig.eyes = [eye];
+    rig.leftArm = leftArm;
+    rig.rightArm = rightArm;
   } else if (type === 'jam_pasir') {
-    const topCap = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 1.4), palette.getMat(0xf59e0b, 'metal'));
-    topCap.position.y = 2.15;
-    const botCap = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 1.4), palette.getMat(0xf59e0b, 'metal'));
-    botCap.position.y = 0.35;
-    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.55, 8), palette.getMat(0x7c3aed, 'emissive'));
-    glass.position.y = 1.25;
+    const brass = palette.getMat(0xf59e0b, 'metal');
+    const botCap = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 1.4), brass);
+    botCap.position.y = 0.24;
+    const upperBody = new THREE.Group();
+    upperBody.position.set(0, 0.35, 0);
+    bodyPivot.add(botCap, upperBody);
+
+    const topCap = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 1.4), brass);
+    topCap.position.y = 1.82;
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.48, 8), palette.getMat(0x7c3aed, 'emissive'));
+    glass.position.y = 0.92;
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.1, 0);
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.1), palette.getMat(0xfef08a, 'emissive'));
-    eyeL.position.set(-0.25, 1.45, 0.56);
+    eyeL.position.set(-0.25, 0, 0.56);
     const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.1), palette.getMat(0xfef08a, 'emissive'));
-    eyeR.position.set(0.25, 1.45, 0.56);
-    root.add(topCap, botCap, glass, eyeL, eyeR);
+    eyeR.position.set(0.25, 0, 0.56);
+    headGroup.add(eyeL, eyeR);
+    upperBody.add(topCap, glass, headGroup);
+
+    const makeBrassArm = (ax: number): THREE.Group => {
+      const arm = new THREE.Group();
+      arm.position.set(ax, 1.25, 0);
+      const pauldron = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.32), brass);
+      pauldron.position.y = -0.14;
+      const fist = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.42, 0.3), palette.getMat(0xb45309, 'metal'));
+      fist.position.y = -0.52;
+      arm.add(pauldron, fist);
+      return arm;
+    };
+    const leftArm = makeBrassArm(-0.92);
+    const rightArm = makeBrassArm(0.92);
+    upperBody.add(leftArm, rightArm);
+    rig.upperBody = upperBody;
+    rig.headGroup = headGroup;
+    rig.eyes = [eyeL, eyeR];
+    rig.leftArm = leftArm;
+    rig.rightArm = rightArm;
+    rig.extraSpin = glass;
   } else if (type === 'semak_rimba') {
-    const bush = new THREE.Mesh(new THREE.BoxGeometry(1.55, 1.4, 1.55), palette.getMat(0x16a34a, 'matte'));
-    bush.position.y = 0.85;
+    const leafDark = palette.getMat(0x16a34a, 'matte');
+    const leafLight = palette.getMat(0x22c55e, 'matte');
+    const bush = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.35, 1.5), leafDark);
+    bush.position.y = 0.72;
     bush.castShadow = true;
-    const crown = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 1.1), palette.getMat(0x22c55e, 'matte'));
-    crown.position.y = 1.65;
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.48, 1.1), leafLight);
+    crown.position.y = 1.55;
     const flower = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.42), palette.getMat(0xf472b6, 'emissive'));
-    flower.position.y = 2.02;
+    flower.position.y = 1.92;
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.1), palette.getMat(0xfef08a, 'emissive'));
-    eyeL.position.set(-0.3, 0.95, 0.79);
+    eyeL.position.set(-0.3, 0.88, 0.77);
     const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.1), palette.getMat(0xfef08a, 'emissive'));
-    eyeR.position.set(0.3, 0.95, 0.79);
-    root.add(bush, crown, flower, eyeL, eyeR);
+    eyeR.position.set(0.3, 0.88, 0.77);
+
+    const makeVineArm = (ax: number): THREE.Group => {
+      const arm = new THREE.Group();
+      arm.position.set(ax, 1.05, 0.06);
+      const vine = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.56, 0.32), leafLight);
+      vine.position.y = -0.24;
+      vine.castShadow = true;
+      const claw = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.34), palette.getMat(0x78350f, 'matte'));
+      claw.position.set(0, -0.58, 0.08);
+      arm.add(vine, claw);
+      return arm;
+    };
+    const leftArm = makeVineArm(-0.9);
+    const rightArm = makeVineArm(0.9);
+    bodyPivot.add(bush, crown, flower, eyeL, eyeR, leftArm, rightArm);
+    rig.leftArm = leftArm;
+    rig.rightArm = rightArm;
+    rig.eyes = [eyeL, eyeR];
+    rig.extraSpin = flower;
   } else if (type === 'creeper_kata') {
-    // Classic Minecraft-style green voxel creeper with glowing fuse core
     const greenBody = palette.getMat(0x16a34a, 'matte');
     const greenHead = palette.getMat(0x22c55e, 'matte');
     const darkPixel = palette.getMat(0x0f172a, 'matte');
-    const legGeo = new THREE.BoxGeometry(0.42, 0.55, 0.42);
-    const legs: Array<[number, number]> = [
+    const legGeo = new THREE.BoxGeometry(0.42, 0.56, 0.42);
+    const legMat = palette.getMat(0x15803d, 'matte');
+    const legs: THREE.Group[] = [];
+    const legCoords: Array<[number, number]> = [
       [-0.36, 0.34],
       [0.36, 0.34],
       [-0.36, -0.34],
       [0.36, -0.34],
     ];
-    legs.forEach(([lx, lz]) => {
-      const leg = new THREE.Mesh(legGeo, palette.getMat(0x15803d, 'matte'));
-      leg.position.set(lx, 0.275, lz);
-      leg.castShadow = true;
-      root.add(leg);
+    legCoords.forEach(([lx, lz]) => {
+      const legPivot = new THREE.Group();
+      legPivot.position.set(lx, 0.56, lz);
+      const m = new THREE.Mesh(legGeo, legMat);
+      m.position.y = -0.28;
+      m.castShadow = true;
+      legPivot.add(m);
+      legs.push(legPivot);
+      bodyPivot.add(legPivot);
     });
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.25, 0.62), greenBody);
-    torso.position.y = 1.15;
+    const upperBody = new THREE.Group();
+    upperBody.position.set(0, 0.56, 0);
+    bodyPivot.add(upperBody);
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.24, 0.62), greenBody);
+    torso.position.y = 0.62;
     torso.castShadow = true;
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.24, 0);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.92, 0.96), greenHead);
-    head.position.y = 2.2;
+    head.position.y = 0.44;
     head.castShadow = true;
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.08), darkPixel);
-    eyeL.position.set(-0.22, 2.3, 0.49);
+    eyeL.position.set(-0.22, 0.54, 0.49);
     const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.08), darkPixel);
-    eyeR.position.set(0.22, 2.3, 0.49);
+    eyeR.position.set(0.22, 0.54, 0.49);
     const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.26, 0.08), darkPixel);
-    mouth.position.set(0, 1.98, 0.49);
-    const fuseCore = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.26, 0),
-      palette.getMat(0xf97316, 'emissive'),
-    );
-    fuseCore.position.set(0, 1.35, 0.34);
-    root.add(torso, head, eyeL, eyeR, mouth, fuseCore);
+    mouth.position.set(0, 0.22, 0.49);
+    headGroup.add(head, eyeL, eyeR, mouth);
+
+    const fuseCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), palette.getMat(0xf97316, 'emissive'));
+    fuseCore.position.set(0, 0.78, 0.34);
+    upperBody.add(torso, headGroup, fuseCore);
+
+    rig.legs = legs;
+    rig.upperBody = upperBody;
+    rig.headGroup = headGroup;
+    rig.eyes = [eyeL, eyeR];
+    rig.extraSpin = fuseCore;
   } else if (type === 'kelelawar_gua') {
-    // Winged voxel Cave Bat hovering below ceiling
     const batBodyMat = palette.getMat(0x312e81, 'matte');
     const batWingMat = palette.getMat(0x1e1b4b, 'matte');
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.56, 0.72), batBodyMat);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.56, 0.74), batBodyMat);
     body.position.y = 0;
     const earL = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 4), batBodyMat);
     earL.position.set(-0.2, 0.42, 0.12);
     const earR = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 4), batBodyMat);
     earR.position.set(0.2, 0.42, 0.12);
-    const eyeL = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.12, 0.08),
-      palette.getMat(0xf43f5e, 'emissive'),
-    );
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.08), palette.getMat(0xf43f5e, 'emissive'));
     eyeL.position.set(-0.15, 0.08, 0.38);
-    const eyeR = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.12, 0.08),
-      palette.getMat(0xf43f5e, 'emissive'),
-    );
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.08), palette.getMat(0xf43f5e, 'emissive'));
     eyeR.position.set(0.15, 0.08, 0.38);
     const leftWing = new THREE.Group();
     leftWing.position.set(-0.31, 0.08, 0);
-    const lwMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 0.62), batWingMat);
+    const lwMesh = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.08, 0.64), batWingMat);
     lwMesh.position.x = -0.58;
     leftWing.add(lwMesh);
     const rightWing = new THREE.Group();
     rightWing.position.set(0.31, 0.08, 0);
-    const rwMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 0.62), batWingMat);
+    const rwMesh = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.08, 0.64), batWingMat);
     rwMesh.position.x = 0.58;
     rightWing.add(rwMesh);
     root.userData.leftWing = leftWing;
     root.userData.rightWing = rightWing;
-    root.add(body, earL, earR, eyeL, eyeR, leftWing, rightWing);
+    bodyPivot.add(body, earL, earR, eyeL, eyeR, leftWing, rightWing);
+    rig.eyes = [eyeL, eyeR];
+    rig.leftWing = leftWing;
+    rig.rightWing = rightWing;
   } else {
-    const armor = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.6, 1.1), palette.getMat(0x1e1b4b, 'metal'));
-    armor.position.y = 1.1;
+    // Bosses / Ksatria IELTS — full articulated Overlord holding Boss Cannon!
+    const darkArmor = palette.getMat(0x1e1b4b, 'metal');
+    const midArmor = palette.getMat(0x312e81, 'metal');
+    const glowMat = palette.getMat(0x22d3ee, 'emissive');
+    const hornGlow = palette.getMat(0xe879f9, 'emissive');
+
+    const legs: THREE.Group[] = [];
+    [-0.36, 0.36].forEach((lx) => {
+      const leg = new THREE.Group();
+      leg.position.set(lx, 0.85, 0);
+      const greave = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.85, 0.48), darkArmor);
+      greave.position.y = -0.42;
+      greave.castShadow = true;
+      leg.add(greave);
+      legs.push(leg);
+      bodyPivot.add(leg);
+    });
+
+    const upperBody = new THREE.Group();
+    upperBody.position.set(0, 0.88, 0);
+    bodyPivot.add(upperBody);
+
+    const armor = new THREE.Mesh(new THREE.BoxGeometry(1.36, 1.15, 0.96), darkArmor);
+    armor.position.y = 0.56;
     armor.castShadow = true;
-    const helm = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.95, 1.05), palette.getMat(0x312e81, 'metal'));
-    helm.position.y = 2.3;
-    const hornL = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.65, 5), palette.getMat(0xe879f9, 'emissive'));
-    hornL.position.set(-0.52, 2.85, 0);
-    const hornR = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.65, 5), palette.getMat(0xe879f9, 'emissive'));
-    hornR.position.set(0.52, 2.85, 0);
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.22, 0.12), palette.getMat(0x22d3ee, 'emissive'));
-    visor.position.set(0, 2.3, 0.55);
-    root.add(armor, helm, hornL, hornR, visor);
+    const chestCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), hornGlow);
+    chestCore.position.set(0, 0.68, 0.5);
+    upperBody.add(armor, chestCore);
+
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.16, 0);
+    const helm = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.88, 0.98), midArmor);
+    helm.position.y = 0.42;
+    helm.castShadow = true;
+    const hornL = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.58, 5), hornGlow);
+    hornL.position.set(-0.46, 0.98, 0);
+    const hornR = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.58, 5), hornGlow);
+    hornR.position.set(0.46, 0.98, 0);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.2, 0.1), glowMat);
+    visor.position.set(0, 0.44, 0.51);
+    headGroup.add(helm, hornL, hornR, visor);
+    upperBody.add(headGroup);
+
+    const makeBossArm = (ax: number, withWeapon: boolean): THREE.Group => {
+      const arm = new THREE.Group();
+      arm.position.set(ax, 1.0, 0);
+      const pauldron = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.44, 0.5), midArmor);
+      pauldron.position.y = -0.14;
+      pauldron.castShadow = true;
+      const gauntlet = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.62, 0.4), darkArmor);
+      gauntlet.position.y = -0.58;
+      gauntlet.castShadow = true;
+      arm.add(pauldron, gauntlet);
+      if (withWeapon) {
+        const wGroup = new THREE.Group();
+        wGroup.position.set(0, -0.78, 0.08);
+        wGroup.rotation.x = Math.PI / 2;
+        const gun = createEnemyBlasterMesh(palette, 'boss', 1.05);
+        wGroup.add(gun);
+        arm.add(wGroup);
+        rig.weaponGroup = wGroup;
+      }
+      return arm;
+    };
+    const leftArm = makeBossArm(-0.88, false);
+    const rightArm = makeBossArm(0.88, true);
+    upperBody.add(leftArm, rightArm);
+
+    rig.legs = legs;
+    rig.upperBody = upperBody;
+    rig.headGroup = headGroup;
+    rig.eyes = [visor];
+    rig.leftArm = leftArm;
+    rig.rightArm = rightArm;
   }
 
+  root.userData.monsterRig = rig;
   if (scale !== 1) {
     root.scale.setScalar(scale);
   }
@@ -679,28 +1442,298 @@ export function createMonsterMesh(
   return root;
 }
 
-// 3D Armed Shooter Enemy (for Petualang & Pendekar difficulties)
+export interface MonsterAnimInput {
+  mode: 'idle' | 'patrol' | 'windup' | 'attack' | 'shoot' | 'hit' | 'ko' | 'celebrate';
+  speed?: number;
+  walkPhase?: number;
+  elapsed: number;
+  phase?: number;
+  attackProgress?: number; // 0..1
+  dt?: number;
+}
+
+export function animateMonsterRig(mesh: THREE.Object3D, input: MonsterAnimInput): void {
+  const rig = mesh.userData.monsterRig as MonsterAnimRig | undefined;
+  if (!rig) return;
+
+  const { mode, speed = 0, walkPhase = 0, elapsed, phase = 0, attackProgress = 0, dt = 0.016 } = input;
+  const damp = 16;
+
+  // Volume-preserving living squash-and-stretch target!
+  const breath = Math.sin(elapsed * 3.1 + phase);
+  let targetScaleY = 1 + breath * 0.048;
+  let targetBodyX = 0;
+  let targetBodyZ = 0;
+  let targetUpperX = breath * 0.04;
+  let targetHeadY = Math.sin(elapsed * 1.4 + phase) * 0.16;
+  let targetRightArmX = -0.28 + Math.sin(elapsed * 2.5 + phase) * 0.14;
+  let targetLeftArmX = -0.22 - Math.sin(elapsed * 2.5 + phase) * 0.14;
+  let targetRightArmZ = -0.1;
+  let targetLeftArmZ = 0.1;
+
+  const swing = speed > 0.25 ? Math.sin(walkPhase) * 0.56 : Math.sin(elapsed * 3.2 + phase) * 0.12;
+  const strideBounce = speed > 0.25 ? Math.abs(Math.sin(walkPhase)) : 0;
+
+  if (mode === 'patrol') {
+    targetScaleY = 1 + breath * 0.045 + strideBounce * 0.065;
+    targetBodyZ = Math.sin(walkPhase * 0.5) * 0.05;
+    if (rig.weaponGroup) {
+      targetRightArmX = -0.68 + swing * 0.18;
+      targetLeftArmX = -0.58 - swing * 0.14;
+    } else {
+      targetRightArmX = -0.3 + swing * 0.62;
+      targetLeftArmX = -0.3 - swing * 0.62;
+    }
+  } else if (mode === 'windup') {
+    // Deep crouch squash before pounce / fire!
+    targetScaleY = 0.8 + Math.sin(elapsed * 28) * 0.035;
+    targetUpperX = -0.24;
+    targetRightArmX = rig.weaponGroup ? -1.45 : -1.95;
+    targetLeftArmX = rig.weaponGroup ? -1.35 : -1.75;
+    targetRightArmZ = -0.22;
+    targetLeftArmZ = 0.42;
+  } else if (mode === 'attack' || mode === 'shoot') {
+    // Explosive stretch forward + weapon aim / slash recoil!
+    const punch = Math.sin(Math.min(1, attackProgress) * Math.PI);
+    targetScaleY = 1.15 - punch * 0.08;
+    targetBodyX = mode === 'attack' ? 0.22 * punch : -0.1 * punch;
+    targetUpperX = mode === 'shoot' ? -0.14 * punch : 0.26 * punch;
+    if (rig.weaponGroup) {
+      targetRightArmX = -1.56 - punch * 0.34;
+      targetRightArmZ = -0.22;
+      targetLeftArmX = -1.42 - punch * 0.2;
+      targetLeftArmZ = 0.48;
+    } else {
+      targetRightArmX = -1.75 * punch;
+      targetLeftArmX = -1.65 * punch;
+    }
+  } else if (mode === 'hit') {
+    targetScaleY = 0.82;
+    targetBodyX = -0.22;
+    targetRightArmX = 0.45;
+    targetLeftArmX = 0.45;
+  } else if (mode === 'ko') {
+    targetScaleY = 0.72;
+    targetRightArmX = 0.25;
+    targetLeftArmX = 0.25;
+  } else if (mode === 'celebrate') {
+    targetScaleY = 1 + Math.abs(Math.sin(elapsed * 8.5)) * 0.12;
+    targetRightArmX = -2.25 + Math.sin(elapsed * 10) * 0.3;
+    targetLeftArmX = -2.15 - Math.sin(elapsed * 10) * 0.3;
+  }
+
+  const curSy = THREE.MathUtils.damp(rig.bodyPivot.scale.y, targetScaleY, damp, dt);
+  const safeSy = Math.max(0.55, curSy);
+  const sXZ = 1 / Math.sqrt(safeSy);
+  rig.bodyPivot.scale.set(sXZ, safeSy, sXZ);
+  rig.bodyPivot.rotation.x = THREE.MathUtils.damp(rig.bodyPivot.rotation.x, targetBodyX, damp, dt);
+  rig.bodyPivot.rotation.z = THREE.MathUtils.damp(rig.bodyPivot.rotation.z, targetBodyZ, damp, dt);
+
+  if (rig.upperBody) {
+    rig.upperBody.rotation.x = THREE.MathUtils.damp(rig.upperBody.rotation.x, targetUpperX, damp, dt);
+  }
+  if (rig.headGroup) {
+    rig.headGroup.rotation.y = THREE.MathUtils.damp(rig.headGroup.rotation.y, targetHeadY, 10, dt);
+  }
+  if (rig.rightArm) {
+    rig.rightArm.rotation.x = THREE.MathUtils.damp(rig.rightArm.rotation.x, targetRightArmX, 22, dt);
+    rig.rightArm.rotation.z = THREE.MathUtils.damp(rig.rightArm.rotation.z, targetRightArmZ, 18, dt);
+  }
+  if (rig.leftArm) {
+    rig.leftArm.rotation.x = THREE.MathUtils.damp(rig.leftArm.rotation.x, targetLeftArmX, 22, dt);
+    rig.leftArm.rotation.z = THREE.MathUtils.damp(rig.leftArm.rotation.z, targetLeftArmZ, 18, dt);
+  }
+  if (rig.legs) {
+    rig.legs.forEach((leg, idx) => {
+      const sign = idx % 2 === 0 ? 1 : -1;
+      const targetLegX = mode === 'ko' ? 0 : swing * sign;
+      leg.rotation.x = THREE.MathUtils.damp(leg.rotation.x, targetLegX, 18, dt);
+    });
+  }
+  if (rig.leftWing && rig.rightWing) {
+    const flap = Math.sin(elapsed * 16 + phase) * 0.64;
+    rig.leftWing.rotation.z = flap;
+    rig.rightWing.rotation.z = -flap;
+  }
+  if (rig.extraSpin) {
+    rig.extraSpin.rotation.y += dt * 2.4;
+  }
+  if (rig.eyes) {
+    const blinkY = mode === 'ko' ? 0.14 : computeBlinkScale(elapsed, phase + 1.4);
+    for (let i = 0; i < rig.eyes.length; i++) {
+      rig.eyes[i].scale.y = blinkY;
+    }
+  }
+}
+
+// 3D Armed Raider Shooter Enemy (Articulated Limbs, Roblox-Style Blaster & Aim/Recoil Stance)
 export function createShooterMesh(palette: MaterialPalette): THREE.Group {
   const root = new THREE.Group();
-  addShadow(root, palette, 0.9);
-  const darkMetal = palette.getMat(0x1e293b, 'metal');
+  addShadow(root, palette, 0.95);
+
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
+  const darkArmor = palette.getMat(0x1e293b, 'metal');
+  const slateArmor = palette.getMat(0x334155, 'metal');
+  const redTrim = palette.getMat(0x991b1b, 'metal');
   const redGlow = palette.getMat(0xf43f5e, 'emissive');
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.25, 0.95), darkMetal);
-  body.position.y = 0.85;
-  body.castShadow = true;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.68, 0.76), palette.getMat(0x334155, 'metal'));
-  head.position.y = 1.85;
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.18, 0.1), redGlow);
-  visor.position.set(0, 1.88, 0.4);
-  const cannon = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.95, 8), darkMetal);
-  cannon.rotation.x = Math.PI / 2;
-  cannon.position.set(0.58, 1.15, 0.45);
-  const cannonTip = new THREE.Mesh(new THREE.OctahedronGeometry(0.15, 0), redGlow);
-  cannonTip.position.set(0.58, 1.15, 0.95);
+  const makeLeg = (lx: number): THREE.Group => {
+    const leg = new THREE.Group();
+    leg.position.set(lx, 0.86, 0);
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.56, 0.36), slateArmor);
+    shin.position.y = -0.28;
+    shin.castShadow = true;
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.46), darkArmor);
+    boot.position.set(0, -0.7, 0.04);
+    boot.castShadow = true;
+    leg.add(shin, boot);
+    return leg;
+  };
+  const leftLeg = makeLeg(-0.23);
+  const rightLeg = makeLeg(0.23);
+  bodyPivot.add(leftLeg, rightLeg);
 
-  root.add(body, head, visor, cannon, cannonTip);
+  const upperBody = new THREE.Group();
+  upperBody.position.set(0, 0.88, 0);
+  bodyPivot.add(upperBody);
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.98, 0.62), darkArmor);
+  torso.position.y = 0.5;
+  torso.castShadow = true;
+  const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.54, 0.14), redTrim);
+  chestPlate.position.set(0, 0.58, 0.3);
+  const coreGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), redGlow);
+  coreGem.position.set(0, 0.58, 0.4);
+  upperBody.add(torso, chestPlate, coreGem);
+
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.02, 0);
+  upperBody.add(headGroup);
+
+  const helm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.74, 0.8), slateArmor);
+  helm.position.y = 0.38;
+  helm.castShadow = true;
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.68), redTrim);
+  crest.position.y = 0.8;
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.1), redGlow);
+  visor.position.set(0, 0.4, 0.42);
+  headGroup.add(helm, crest, visor);
+
+  const weaponGroup = new THREE.Group();
+  const makeShooterArm = (ax: number, withBlaster: boolean): THREE.Group => {
+    const arm = new THREE.Group();
+    arm.position.set(ax, 0.86, 0);
+    const pauldron = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.38), redTrim);
+    pauldron.position.y = -0.14;
+    pauldron.castShadow = true;
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.5, 0.3), slateArmor);
+    forearm.position.y = -0.46;
+    forearm.castShadow = true;
+    const glove = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.28), darkArmor);
+    glove.position.y = -0.74;
+    arm.add(pauldron, forearm, glove);
+    if (withBlaster) {
+      weaponGroup.position.set(0, -0.74, 0.08);
+      weaponGroup.rotation.x = Math.PI / 2;
+      weaponGroup.add(createEnemyBlasterMesh(palette, 'raider', 0.98));
+      arm.add(weaponGroup);
+    }
+    return arm;
+  };
+  const leftArm = makeShooterArm(-0.62, false);
+  const rightArm = makeShooterArm(0.62, true);
+  upperBody.add(leftArm, rightArm);
+
+  const shooterRig: ShooterAnimRig = {
+    bodyPivot,
+    upperBody,
+    headGroup,
+    visor,
+    leftLeg,
+    rightLeg,
+    leftArm,
+    rightArm,
+    weaponGroup,
+  };
+  root.userData.shooterRig = shooterRig;
   return root;
+}
+
+export interface ShooterAnimInput {
+  speed: number;
+  walkPhase: number;
+  aimAlpha: number; // 0 = patrol ready, 1 = full aiming telegraph
+  recoil: number; // 0..1 barrel kickback impulse
+  hitSquash: number; // 0..1 hit impact squash
+  elapsed: number;
+  phase: number;
+  dt: number;
+}
+
+export function animateShooterRig(mesh: THREE.Object3D, input: ShooterAnimInput): void {
+  const rig = mesh.userData.shooterRig as ShooterAnimRig | undefined;
+  if (!rig) return;
+
+  const { speed, walkPhase, aimAlpha, recoil, hitSquash, elapsed, phase, dt } = input;
+  const moving = speed > 0.25;
+  const swing = moving ? Math.sin(walkPhase) * 0.58 : 0;
+  const breath = Math.sin(elapsed * 2.8 + phase);
+
+  // Volume-preserving living breathing + windup/hit squash-and-stretch!
+  const stepBounce = moving ? Math.abs(Math.sin(walkPhase)) * 0.05 : 0;
+  const targetSy =
+    1 + breath * 0.04 + stepBounce - aimAlpha * 0.07 + recoil * 0.09 - hitSquash * 0.16;
+  const curSy = THREE.MathUtils.damp(rig.bodyPivot.scale.y, targetSy, 18, dt);
+  const safeSy = Math.max(0.65, curSy);
+  const sXZ = 1 / Math.sqrt(safeSy);
+  rig.bodyPivot.scale.set(sXZ, safeSy, sXZ);
+
+  // Legs stride
+  rig.leftLeg.rotation.x = THREE.MathUtils.damp(rig.leftLeg.rotation.x, swing, 18, dt);
+  rig.rightLeg.rotation.x = THREE.MathUtils.damp(rig.rightLeg.rotation.x, -swing, 18, dt);
+
+  // Torso twists into two-handed rifle aim stance + kicks back on recoil!
+  const targetUpperY = THREE.MathUtils.lerp(-0.18, -0.38, aimAlpha);
+  const targetUpperX = THREE.MathUtils.lerp(0.03, 0.08 - recoil * 0.16, aimAlpha) - hitSquash * 0.2;
+  rig.upperBody.rotation.y = THREE.MathUtils.damp(rig.upperBody.rotation.y, targetUpperY, 16, dt);
+  rig.upperBody.rotation.x = THREE.MathUtils.damp(rig.upperBody.rotation.x, targetUpperX, 18, dt);
+
+  // Head counter-rotates to lock eyes on target!
+  rig.headGroup.rotation.y = THREE.MathUtils.damp(rig.headGroup.rotation.y, -targetUpperY * 0.92, 16, dt);
+  rig.headGroup.rotation.x = THREE.MathUtils.damp(rig.headGroup.rotation.x, aimAlpha * 0.06 - recoil * 0.1, 16, dt);
+
+  // Right arm (trigger + blaster) & Left arm (foregrip support)
+  const targetRightArmX = THREE.MathUtils.lerp(-0.78 + swing * 0.14, -1.52 - recoil * 0.34, aimAlpha);
+  const targetRightArmZ = THREE.MathUtils.lerp(-0.18, -0.24, aimAlpha);
+  const targetRightArmY = THREE.MathUtils.lerp(0.14, 0.2, aimAlpha);
+
+  const targetLeftArmX = THREE.MathUtils.lerp(-0.9 - swing * 0.1, -1.44 - recoil * 0.22, aimAlpha);
+  const targetLeftArmZ = THREE.MathUtils.lerp(0.44, 0.56, aimAlpha);
+  const targetLeftArmY = -0.14;
+
+  rig.rightArm.rotation.x = THREE.MathUtils.damp(rig.rightArm.rotation.x, targetRightArmX, 24, dt);
+  rig.rightArm.rotation.y = THREE.MathUtils.damp(rig.rightArm.rotation.y, targetRightArmY, 20, dt);
+  rig.rightArm.rotation.z = THREE.MathUtils.damp(rig.rightArm.rotation.z, targetRightArmZ, 20, dt);
+
+  rig.leftArm.rotation.x = THREE.MathUtils.damp(rig.leftArm.rotation.x, targetLeftArmX, 24, dt);
+  rig.leftArm.rotation.y = THREE.MathUtils.damp(rig.leftArm.rotation.y, targetLeftArmY, 20, dt);
+  rig.leftArm.rotation.z = THREE.MathUtils.damp(rig.leftArm.rotation.z, targetLeftArmZ, 20, dt);
+
+  rig.weaponGroup.rotation.y = THREE.MathUtils.damp(
+    rig.weaponGroup.rotation.y,
+    THREE.MathUtils.lerp(0.22, 0.3, aimAlpha),
+    20,
+    dt,
+  );
+  rig.weaponGroup.position.z = THREE.MathUtils.damp(
+    rig.weaponGroup.position.z,
+    0.08 - recoil * 0.07,
+    24,
+    dt,
+  );
+  rig.visor.scale.y = computeBlinkScale(elapsed, phase + 2.1);
 }
 
 // 6. Swirling Stone Portal to Istana IELTS ("Portal Kerajaan")
@@ -1533,79 +2566,145 @@ export function createCaptiveMesh(
 ): THREE.Group {
   const root = new THREE.Group();
   addShadow(root, palette, 0.72);
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
   const skin = palette.getMat(0xfed7aa, 'matte');
   const outfit = palette.getMat(colorHex, 'matte');
   const darkEye = palette.getMat(0x0f172a, 'matte');
+  const rig: CaptiveAnimRig = { bodyPivot };
 
   if (kind === 'fox_kit') {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.72, 0.85), outfit);
     body.position.y = 0.56;
     body.castShadow = true;
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.15, 0.16);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.6, 0.68), outfit);
-    head.position.set(0, 1.18, 0.16);
     const earL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.28, 0.14), outfit);
-    earL.position.set(-0.2, 1.56, 0.12);
+    earL.position.set(-0.2, 0.42, -0.04);
     const earR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.28, 0.14), outfit);
-    earR.position.set(0.2, 1.56, 0.12);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.62), palette.getMat(0xf8fafc, 'matte'));
-    tail.position.set(0, 0.62, -0.58);
+    earR.position.set(0.2, 0.42, -0.04);
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
-    eyeL.position.set(-0.15, 1.22, 0.52);
+    eyeL.position.set(-0.15, 0.04, 0.36);
     const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
-    eyeR.position.set(0.15, 1.22, 0.52);
-    root.add(body, head, earL, earR, tail, eyeL, eyeR);
+    eyeR.position.set(0.15, 0.04, 0.36);
+    headGroup.add(head, earL, earR, eyeL, eyeR);
+
+    const tailPivot = new THREE.Group();
+    tailPivot.position.set(0, 0.58, -0.38);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.62), palette.getMat(0xf8fafc, 'matte'));
+    tail.position.set(0, 0.06, -0.26);
+    tailPivot.add(tail);
+
+    bodyPivot.add(body, headGroup, tailPivot);
+    rig.headGroup = headGroup;
+    rig.leftEye = eyeL;
+    rig.rightEye = eyeR;
+    rig.tailPivot = tailPivot;
+    root.userData.captiveRig = rig;
     return root;
   }
 
   if (kind === 'spirit') {
-    const core = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.55, 0),
-      palette.getMat(colorHex, 'emissive'),
-    );
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), palette.getMat(colorHex, 'emissive'));
     core.position.y = 1.45;
-    const halo = new THREE.Mesh(
-      new THREE.TorusGeometry(0.68, 0.08, 6, 18),
-      palette.getMat(0xfef08a, 'emissive'),
-    );
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.08, 6, 18), palette.getMat(0xfef08a, 'emissive'));
     halo.rotation.x = Math.PI / 2;
     halo.position.y = 1.45;
-    const baseOrb = new THREE.Mesh(
-      new THREE.ConeGeometry(0.42, 0.95, 6),
-      palette.getMat(0x7c3aed, 'gloss'),
-    );
+    const baseOrb = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.95, 6), palette.getMat(0x7c3aed, 'gloss'));
     baseOrb.position.y = 0.65;
-    root.add(baseOrb, core, halo);
+    bodyPivot.add(baseOrb, core, halo);
+    rig.halo = halo;
+    root.userData.captiveRig = rig;
     return root;
   }
 
-  const heightScale = kind === 'girl' ? 0.82 : 0.96;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.88, 0.44), outfit);
+  const heightScale = kind === 'girl' ? 0.86 : 0.98;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.88, 0.46), outfit);
   torso.position.y = 0.88;
   torso.castShadow = true;
+
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.38, 0);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.64, 0.64), skin);
-  head.position.y = 1.68;
+  head.position.y = 0.32;
   head.castShadow = true;
   const hair = new THREE.Mesh(
     new THREE.BoxGeometry(0.68, 0.24, 0.68),
     palette.getMat(kind === 'mother' ? 0x57534e : 0x3b2008, 'matte'),
   );
-  hair.position.y = 1.98;
+  hair.position.y = 0.62;
   const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
-  eyeL.position.set(-0.15, 1.68, 0.33);
+  eyeL.position.set(-0.15, 0.32, 0.33);
   const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkEye);
-  eyeR.position.set(0.15, 1.68, 0.33);
+  eyeR.position.set(0.15, 0.32, 0.33);
+  headGroup.add(head, hair, eyeL, eyeR);
+  if (kind === 'girl') {
+    const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.14, 0.14), palette.getMat(0xe11d48, 'matte'));
+    ribbon.position.set(0.24, 0.72, 0.12);
+    headGroup.add(ribbon);
+  }
+
+  const makeCaptiveArm = (ax: number): THREE.Group => {
+    const arm = new THREE.Group();
+    arm.position.set(ax, 1.24, 0);
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.34, 0.26), outfit);
+    sleeve.position.y = -0.14;
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.28, 0.22), skin);
+    hand.position.y = -0.44;
+    arm.add(sleeve, hand);
+    return arm;
+  };
+  const leftArm = makeCaptiveArm(-0.48);
+  const rightArm = makeCaptiveArm(0.48);
+
   const legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.45, 0.26), palette.getMat(0x1e293b, 'matte'));
   legL.position.set(-0.18, 0.24, 0);
   const legR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.45, 0.26), palette.getMat(0x1e293b, 'matte'));
   legR.position.set(0.18, 0.24, 0);
-  root.add(legL, legR, torso, head, hair, eyeL, eyeR);
-  if (kind === 'girl') {
-    const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.14, 0.14), palette.getMat(0xe11d48, 'matte'));
-    ribbon.position.set(0.24, 2.1, 0.12);
-    root.add(ribbon);
-  }
+
+  bodyPivot.add(legL, legR, torso, headGroup, leftArm, rightArm);
+  rig.headGroup = headGroup;
+  rig.leftEye = eyeL;
+  rig.rightEye = eyeR;
+  rig.leftArm = leftArm;
+  rig.rightArm = rightArm;
+  root.userData.captiveRig = rig;
   root.scale.setScalar(heightScale);
   return root;
+}
+
+export function animateCaptiveMesh(mesh: THREE.Object3D, elapsed: number, happy = false): void {
+  const rig = mesh.userData.captiveRig as CaptiveAnimRig | undefined;
+  if (!rig) return;
+  const breath = Math.sin(elapsed * (happy ? 5.8 : 2.8));
+  const sy = 1 + breath * (happy ? 0.08 : 0.045);
+  const sXZ = 1 / Math.sqrt(sy);
+  rig.bodyPivot.scale.set(sXZ, sy, sXZ);
+  if (rig.headGroup) {
+    rig.headGroup.rotation.y = Math.sin(elapsed * 2.2) * 0.2;
+  }
+  if (rig.leftEye && rig.rightEye) {
+    const blinkY = computeBlinkScale(elapsed, 3.3);
+    rig.leftEye.scale.y = blinkY;
+    rig.rightEye.scale.y = blinkY;
+  }
+  if (rig.leftArm && rig.rightArm) {
+    if (happy) {
+      rig.leftArm.rotation.x = -2.1 + Math.sin(elapsed * 10) * 0.35;
+      rig.rightArm.rotation.x = -2.1 - Math.sin(elapsed * 10) * 0.35;
+    } else {
+      rig.leftArm.rotation.x = -0.35 + Math.sin(elapsed * 4.5) * 0.2;
+      rig.rightArm.rotation.x = -0.35 - Math.sin(elapsed * 4.5) * 0.2;
+    }
+  }
+  if (rig.tailPivot) {
+    rig.tailPivot.rotation.y = Math.sin(elapsed * 7) * 0.38;
+  }
+  if (rig.halo) {
+    rig.halo.rotation.z = elapsed * 2.4;
+  }
 }
 
 export function createPrisonKeyMesh(palette: MaterialPalette): THREE.Group {
@@ -2246,15 +3345,22 @@ export function createDungeonEnvironment(
   );
   chestBand.position.y = 0.88;
   const chestOrb = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.45, 0),
+    new THREE.OctahedronGeometry(0.36, 0),
     palette.getMat(0x38bdf8, 'emissive'),
   );
-  chestOrb.position.set(0, 1.7, 0);
+  chestOrb.position.set(0, 2.38, 0);
   chestOrb.userData.animKind = 'bob';
-  chestOrb.userData.baseY = 1.7;
+  chestOrb.userData.baseY = 2.38;
   chestOrb.userData.phase = 0.4;
   animatables.push(chestOrb);
-  chestGroup.add(chestBase, chestBand, chestOrb);
+
+  const chestGun = createWeaponMesh('kerikil', palette, 1.25);
+  chestGun.position.set(0, 1.56, 0);
+  chestGun.rotation.set(0.18, 0.4, 0.1);
+  chestGun.userData.animKind = 'spin';
+  animatables.push(chestGun);
+
+  chestGroup.add(chestBase, chestBand, chestOrb, chestGun);
   group.add(chestGroup);
 
   const weaponChest: CaveWeaponChestRig = {
@@ -2491,6 +3597,7 @@ export interface FirstPersonViewRig {
   root: THREE.Group;
   handPivot: THREE.Group;
   weaponGroup: THREE.Group;
+  weaponMeshes: Record<WeaponId, THREE.Group>;
   weaponTipMat: THREE.MeshStandardMaterial;
   pickaxeGroup: THREE.Group;
   pickaxeHeadMat: THREE.MeshStandardMaterial;
@@ -2515,7 +3622,7 @@ export function createFirstPersonViewRig(palette: MaterialPalette): FirstPersonV
   arm.position.set(0, 0, -0.08);
   handPivot.add(sleeve, arm);
 
-  // 1) Blaster weapon viewmodel
+  // 1) Stylized Roblox-grade 3D Blaster / Weapon Viewmodels
   const weaponTipMat = new THREE.MeshStandardMaterial({
     color: 0x4fd8ff,
     emissive: 0x4fd8ff,
@@ -2523,19 +3630,16 @@ export function createFirstPersonViewRig(palette: MaterialPalette): FirstPersonV
     roughness: 0.2,
   });
   const weaponGroup = new THREE.Group();
-  weaponGroup.position.set(-0.04, 0.12, -0.24);
-  const gunBody = new THREE.Mesh(
-    new THREE.BoxGeometry(0.14, 0.16, 0.38),
-    palette.getMat(0x0ea5e9, 'metal'),
-  );
-  const gunBarrel = new THREE.Mesh(
-    new THREE.BoxGeometry(0.1, 0.1, 0.18),
-    palette.getMat(0x1e293b, 'metal'),
-  );
-  gunBarrel.position.set(0, 0.03, -0.22);
-  const gunTip = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), weaponTipMat);
-  gunTip.position.set(0, 0.03, -0.34);
-  weaponGroup.add(gunBody, gunBarrel, gunTip);
+  weaponGroup.position.set(-0.04, 0.13, -0.26);
+  // Rotate PI on Y so +Z barrel from createWeaponMesh points forward (-Z in camera space)
+  weaponGroup.rotation.y = Math.PI;
+  const weaponMeshes = {} as Record<WeaponId, THREE.Group>;
+  WEAPON_ORDER.forEach((wId) => {
+    const wMesh = createWeaponMesh(wId, palette, 0.62);
+    wMesh.visible = wId === 'ketapel';
+    weaponMeshes[wId] = wMesh;
+    weaponGroup.add(wMesh);
+  });
   handPivot.add(weaponGroup);
 
   // 2) Voxel Pickaxe viewmodel (color shifts with Pickaxe Tier!)
@@ -2614,6 +3718,7 @@ export function createFirstPersonViewRig(palette: MaterialPalette): FirstPersonV
     root,
     handPivot,
     weaponGroup,
+    weaponMeshes,
     weaponTipMat,
     pickaxeGroup,
     pickaxeHeadMat,
@@ -2626,7 +3731,7 @@ export function createFirstPersonViewRig(palette: MaterialPalette): FirstPersonV
 export function setFirstPersonHeldVisual(
   rig: FirstPersonViewRig,
   mode: 'bare' | 'weapon' | 'pickaxe' | 'torch' | 'shield_block' | 'tnt',
-  colorHex = 0x4fd8ff,
+  weaponOrColorHex: WeaponId | number = 'ketapel',
   pickaxeTier: 1 | 2 | 3 = 1,
 ): void {
   rig.weaponGroup.visible = mode === 'weapon';
@@ -2634,8 +3739,15 @@ export function setFirstPersonHeldVisual(
   rig.torchGroup.visible = mode === 'torch';
   rig.shieldBlockGroup.visible = mode === 'shield_block';
   rig.tntGroup.visible = mode === 'tnt';
-  rig.weaponTipMat.color.setHex(colorHex);
-  rig.weaponTipMat.emissive.setHex(colorHex);
+  if (typeof weaponOrColorHex === 'string') {
+    WEAPON_ORDER.forEach((id) => {
+      const m = rig.weaponMeshes[id];
+      if (m) m.visible = id === weaponOrColorHex;
+    });
+  } else {
+    rig.weaponTipMat.color.setHex(weaponOrColorHex);
+    rig.weaponTipMat.emissive.setHex(weaponOrColorHex);
+  }
   const tierHex = pickaxeTier === 3 ? 0x22d3ee : pickaxeTier === 2 ? 0xe2e8f0 : 0x94a3b8;
   rig.pickaxeHeadMat.color.setHex(tierHex);
 }

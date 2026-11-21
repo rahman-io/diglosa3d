@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Crosshair,
+  Focus,
   Lock,
   X,
 } from 'lucide-react';
@@ -37,6 +39,9 @@ interface RpgHudProps {
   onOpenLeaderboard: () => void;
   onPrimaryAction: () => void;
   onFireWeapon: () => void;
+  onSetFireHeld: (held: boolean) => void;
+  onToggleAim: () => void;
+  onTogglePointerLock: () => void;
   onJump: () => void;
   onOpenCrafting: () => void;
   onVirtualMove: (vx: number, vz: number) => void;
@@ -59,6 +64,9 @@ export const RpgHud: React.FC<RpgHudProps> = ({
   onOpenLeaderboard,
   onPrimaryAction,
   onFireWeapon,
+  onSetFireHeld,
+  onToggleAim,
+  onTogglePointerLock,
   onJump,
   onOpenCrafting,
   onVirtualMove,
@@ -365,8 +373,24 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           </button>
         </div>
 
-        {/* Top-Right Utility Medallion Row (Icon-Only: Camera Eye View, Fullscreen, Mute, Menu) */}
+        {/* Top-Right Utility Medallion Row (Icon-Only: Mouse Lock, Camera Eye View, Fullscreen, Mute, Menu) */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {!showTouchControls && hud.phase === 'playing' && (hud.cameraMode === 'third_back' || hud.cameraMode === 'first_person') && (
+            <button
+              type="button"
+              onClick={onTogglePointerLock}
+              title={hud.pointerLocked ? 'Lepas Kunci Bidik Mouse (Esc / L)' : 'Kunci Mouse untuk Bidik ala PC PUBG (L)'}
+              aria-label="Kunci Bidik Mouse"
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full border transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10 ${
+                hud.pointerLocked
+                  ? 'border-cyan-300 bg-cyan-950/90 text-cyan-200 ring-2 ring-cyan-400/70'
+                  : 'border-white/25 bg-slate-950/80 text-slate-200 hover:border-cyan-300/60'
+              }`}
+            >
+              <Focus className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onToggleCamera}
@@ -491,18 +515,94 @@ export const RpgHud: React.FC<RpgHudProps> = ({
         </div>
       )}
 
-      {/* Center Crosshair in First-Person Mode */}
-      {hud.cameraMode === 'first_person' && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none fixed left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
-        >
-          <div className="relative h-6 w-6">
-            <span className="absolute left-1/2 top-0 h-6 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_2px_#000]" />
-            <span className="absolute left-0 top-1/2 h-0.5 w-6 -translate-y-1/2 bg-white shadow-[0_0_2px_#000]" />
-          </div>
-        </div>
-      )}
+      {/* Dynamic PUBG-Style Tactical Crosshair & Hit Marker in TPS & FPS Modes */}
+      {hud.phase === 'playing' &&
+        (hud.cameraMode === 'first_person' ||
+          (hud.cameraMode === 'third_back' &&
+            (hud.ownedWeapons.length > 0 || hud.isAiming))) && (() => {
+          const gap = hud.isAiming
+            ? 4 + hud.crosshairSpread * 5
+            : 8 + hud.crosshairSpread * 13;
+          const colorClass = hud.crosshairOnEnemy
+            ? 'bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.95)]'
+            : hud.isAiming
+            ? 'bg-cyan-200 shadow-[0_0_4px_rgba(0,0,0,0.9)]'
+            : 'bg-white shadow-[0_0_3px_rgba(0,0,0,0.9)]';
+          const tickLen = hud.isAiming ? 8 : 7;
+          return (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
+            >
+              {/* ADS Outer Precision Ring */}
+              {hud.isAiming && (
+                <div
+                  className={`absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full border transition-colors ${
+                    hud.crosshairOnEnemy ? 'border-rose-400/75' : 'border-cyan-300/45'
+                  }`}
+                />
+              )}
+              {/* Center Precision Dot */}
+              <span
+                className={`absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors ${
+                  hud.crosshairOnEnemy
+                    ? 'bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,1)]'
+                    : 'bg-white shadow-[0_0_3px_#000]'
+                }`}
+              />
+              {/* 4 Dynamic Reticle Ticks */}
+              <span
+                style={{ height: tickLen, transform: `translate(-50%, calc(-100% - ${gap}px))` }}
+                className={`absolute left-1/2 top-1/2 w-[2px] rounded-full transition-[background-color] ${colorClass}`}
+              />
+              <span
+                style={{ height: tickLen, transform: `translate(-50%, ${gap}px)` }}
+                className={`absolute left-1/2 top-1/2 w-[2px] rounded-full transition-[background-color] ${colorClass}`}
+              />
+              <span
+                style={{ width: tickLen, transform: `translate(calc(-100% - ${gap}px), -50%)` }}
+                className={`absolute left-1/2 top-1/2 h-[2px] rounded-full transition-[background-color] ${colorClass}`}
+              />
+              <span
+                style={{ width: tickLen, transform: `translate(${gap}px, -50%)` }}
+                className={`absolute left-1/2 top-1/2 h-[2px] rounded-full transition-[background-color] ${colorClass}`}
+              />
+              {/* Hit / Kill X Marker */}
+              {hud.hitMarkerKind !== 'none' && (
+                <div className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2">
+                  <span
+                    className={`absolute left-1/2 top-0 h-2.5 w-[2.5px] -translate-x-1/2 rotate-45 rounded-full ${
+                      hud.hitMarkerKind === 'kill'
+                        ? 'bg-amber-300 shadow-[0_0_8px_#f59e0b]'
+                        : 'bg-white shadow-[0_0_5px_#000]'
+                    }`}
+                  />
+                  <span
+                    className={`absolute left-1/2 bottom-0 h-2.5 w-[2.5px] -translate-x-1/2 rotate-45 rounded-full ${
+                      hud.hitMarkerKind === 'kill'
+                        ? 'bg-amber-300 shadow-[0_0_8px_#f59e0b]'
+                        : 'bg-white shadow-[0_0_5px_#000]'
+                    }`}
+                  />
+                  <span
+                    className={`absolute left-1/2 top-0 h-2.5 w-[2.5px] -translate-x-1/2 -rotate-45 rounded-full ${
+                      hud.hitMarkerKind === 'kill'
+                        ? 'bg-amber-300 shadow-[0_0_8px_#f59e0b]'
+                        : 'bg-white shadow-[0_0_5px_#000]'
+                    }`}
+                  />
+                  <span
+                    className={`absolute left-1/2 bottom-0 h-2.5 w-[2.5px] -translate-x-1/2 -rotate-45 rounded-full ${
+                      hud.hitMarkerKind === 'kill'
+                        ? 'bg-amber-300 shadow-[0_0_8px_#f59e0b]'
+                        : 'bg-white shadow-[0_0_5px_#000]'
+                    }`}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
       {/* Targeted Cave Voxel Block Pill (only when aiming at a cave block) */}
       {hud.worldMode === 'dungeon' && hud.targetedBlock && (
@@ -1003,13 +1103,42 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           />
         </button>
 
-        {/* Button 3 (Primary Thumb Anchor): Large Attack / Active Tool Medallion */}
+        {/* Optional ADS / Scope Bidik Button (shows when holding an owned weapon) */}
+        {hud.activeHotbarSlot <= 7 && hud.ownedWeapons.includes(hud.activeWeapon) && (
+          <button
+            type="button"
+            onClick={onToggleAim}
+            title={hud.isAiming ? 'Keluar Mode Bidik / Scope (Klik Kanan / Q)' : 'Mode Bidik / Scope (Klik Kanan / Q)'}
+            aria-label="Mode Bidik Scope"
+            className={`pointer-events-auto absolute bottom-[92px] right-[86px] flex h-[46px] w-[46px] items-center justify-center rounded-full border-2 shadow-xl backdrop-blur-md transition-transform active:scale-90 sm:bottom-[108px] sm:right-[100px] sm:h-[52px] sm:w-[52px] ${
+              hud.isAiming
+                ? 'scale-105 border-rose-300 bg-rose-950/90 text-rose-200 ring-2 ring-rose-400/80 shadow-[0_0_16px_rgba(244,63,94,0.6)]'
+                : 'border-cyan-300/70 bg-slate-950/85 text-cyan-200 hover:scale-105 hover:border-cyan-200'
+            }`}
+          >
+            <Crosshair className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        )}
+
+        {/* Button 3 (Primary Thumb Anchor): Large Attack / Active Tool Medallion (Hold to Spray!) */}
         <button
           type="button"
-          onClick={onFireWeapon}
-          title="Aksi / Tembak (Spasi)"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onSetFireHeld(true);
+          }}
+          onPointerUp={() => onSetFireHeld(false)}
+          onPointerCancel={() => onSetFireHeld(false)}
+          onPointerLeave={() => onSetFireHeld(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onFireWeapon();
+            }
+          }}
+          title="Tahan / Tekan untuk Menembak ke Crosshair (Spasi / Klik Kiri)"
           aria-label="Tembak"
-          className="pointer-events-auto absolute bottom-0 right-0 flex h-[78px] w-[78px] items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[90px] sm:w-[90px]"
+          className="pointer-events-auto absolute bottom-0 right-0 flex h-[78px] w-[78px] touch-none select-none items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-[90px] sm:w-[90px]"
         >
           <img
             src="./assets/ui/btn_attack.png"

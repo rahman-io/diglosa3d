@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createMaterialPalette } from '../three/materials';
 import {
+  animateMonsterRig,
+  applyHeroWeaponPose,
   createHeroAvatar,
   createMonsterMesh,
   setHeroWeaponVisual,
 } from '../three/rpgModels';
-import { MonsterType } from '../types/game';
+import { MonsterType, WeaponId } from '../types/game';
 
 export type BattleAnimEvent =
   | 'idle'
@@ -19,6 +22,8 @@ export type BattleAnimEvent =
 interface BattleArenaCanvasProps {
   monsterType: MonsterType;
   isBoss: boolean;
+  activeWeapon: WeaponId;
+  hasWeapon: boolean;
   eventKind: BattleAnimEvent;
   eventTick: number;
 }
@@ -37,6 +42,8 @@ interface SparkParticle {
 export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
   monsterType,
   isBoss,
+  activeWeapon,
+  hasWeapon,
   eventKind,
   eventTick,
 }) => {
@@ -67,12 +74,19 @@ export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
     host.appendChild(renderer.domElement);
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.display = 'block';
 
     const scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTex;
+    pmrem.dispose();
+
     const camera = new THREE.PerspectiveCamera(34, 2.5, 0.1, 60);
     camera.position.set(0, 2.15, 8.6);
     camera.lookAt(0, 1.35, 0);
@@ -90,7 +104,7 @@ export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
 
     // 3D Hero Explorer
     const heroRig = createHeroAvatar(palette);
-    setHeroWeaponVisual(heroRig, 0x38bdf8, true);
+    setHeroWeaponVisual(heroRig, activeWeapon, hasWeapon);
     const HERO_HOME_X = -2.25;
     heroRig.root.position.set(HERO_HOME_X, 0, 0);
     heroRig.root.rotation.y = Math.PI * 0.42;
@@ -191,44 +205,44 @@ export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
       let hx = HERO_HOME_X;
       let hy = Math.sin(totalTime * 3.1) * 0.05;
       let hRotZ = 0;
-      let hRightArmX = -0.35 + Math.sin(totalTime * 3.1) * 0.08;
-      let hLeftArmX = Math.sin(totalTime * 3.1 + Math.PI) * 0.08;
-      let hLegSwing = 0;
+      let poseSpeed = 0;
+      let poseWalkCycle = 0;
+      let poseAimAlpha = 0.22;
+      let poseRecoil = 0;
+      let usePoseSolver = true;
 
       let mx = MON_HOME_X;
       let my = MON_BASE_Y + Math.sin(totalTime * 2.8 + 1.1) * 0.08;
       let mRotZ = 0;
       let mScale = isBoss ? 1.15 : 0.96;
+      let monMode: 'idle' | 'patrol' | 'windup' | 'attack' | 'shoot' | 'hit' | 'ko' | 'celebrate' =
+        'idle';
+      let monAttackProg = 0;
 
       projMesh.visible = false;
       (heroRig.dashRing.material as THREE.MeshBasicMaterial).opacity = 0;
 
-      // Wing flap if monster has wings
-      const lw = monsterGroup.userData.leftWing as THREE.Object3D | undefined;
-      const rw = monsterGroup.userData.rightWing as THREE.Object3D | undefined;
-      if (lw && rw) {
-        lw.rotation.z = Math.sin(totalTime * 11) * 0.45;
-        rw.rotation.z = -lw.rotation.z;
-      }
-
       const t = st.elapsed;
 
       if (st.kind === 'grab_ready') {
+        monMode = 'windup';
         hx = HERO_HOME_X + 0.45;
-        hRightArmX = -1.25;
+        poseAimAlpha = 1;
         (heroRig.dashRing.material as THREE.MeshBasicMaterial).opacity =
           0.45 + Math.sin(totalTime * 10) * 0.2;
       } else if (st.kind === 'hero_attack') {
+        poseAimAlpha = 1;
         if (t < 0.35) {
           const p = t / 0.35;
           hx = HERO_HOME_X + Math.sin(p * Math.PI) * 1.45;
-          hRightArmX = -1.45;
-          hLegSwing = Math.sin(p * Math.PI * 3) * 0.55;
+          poseSpeed = 5;
+          poseWalkCycle = p * Math.PI * 3;
+          poseRecoil = Math.sin(p * Math.PI);
           projMesh.visible = true;
           projMesh.material = heroProjMat;
           projMesh.position.set(
             THREE.MathUtils.lerp(HERO_HOME_X + 0.7, MON_HOME_X - 0.3, p),
-            1.45,
+            1.65,
             0,
           );
           projMesh.rotation.y += dt * 14;
@@ -236,11 +250,14 @@ export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
           const k = (t - 0.35) / 0.5;
           mx = MON_HOME_X + Math.sin(k * Math.PI) * 0.75;
           mRotZ = -Math.sin(k * Math.PI) * 0.38;
+          monMode = 'hit';
         }
       } else if (st.kind === 'monster_attack') {
         if (t < 0.35) {
           const p = t / 0.35;
           mx = MON_HOME_X - Math.sin(p * Math.PI) * 1.45;
+          monMode = isBoss || monsterType === 'bayangan_kata' ? 'shoot' : 'attack';
+          monAttackProg = p;
           projMesh.visible = true;
           projMesh.material = monProjMat;
           projMesh.position.set(
@@ -255,36 +272,59 @@ export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
           hRotZ = Math.sin(k * Math.PI) * 0.38;
         }
       } else if (st.kind === 'monster_ko') {
+        usePoseSolver = false;
+        monMode = 'ko';
         const p = Math.min(1, t / 0.45);
-        // Victorious hopping Hero raising weapon & arm!
+        // Victorious hopping Hero raising arms!
         hy = Math.abs(Math.sin(totalTime * 9)) * 0.55;
-        hRightArmX = -2.55;
-        hLeftArmX = -2.35;
+        heroRig.upperBody.rotation.set(0, 0, 0);
+        heroRig.headGroup.rotation.set(0, 0, 0);
+        heroRig.rightArm.rotation.set(-2.55, 0, 0);
+        heroRig.leftArm.rotation.set(-2.35, 0, 0);
+        heroRig.leftLeg.rotation.x = 0;
+        heroRig.rightLeg.rotation.x = 0;
         // Knocked-out Monster toppled onto the arena floor
         mx = MON_HOME_X + p * 0.7;
         my = THREE.MathUtils.lerp(MON_BASE_Y, 0.45, p);
         mRotZ = THREE.MathUtils.lerp(0, -Math.PI / 2, p);
         mScale *= 1 - p * 0.18;
       } else if (st.kind === 'hero_ko') {
+        usePoseSolver = false;
+        monMode = 'celebrate';
         const p = Math.min(1, t / 0.45);
-        // Knocked-out Hero fallen sideways!
         hx = HERO_HOME_X - p * 0.65;
         hy = THREE.MathUtils.lerp(0, 0.42, p);
         hRotZ = THREE.MathUtils.lerp(0, Math.PI / 2, p);
-        // Monster hopping gleefully!
+        heroRig.upperBody.rotation.set(0, 0, 0);
+        heroRig.headGroup.rotation.set(0, 0, 0);
+        heroRig.rightArm.rotation.set(0, 0, 0);
+        heroRig.leftArm.rotation.set(0, 0, 0);
         my = MON_BASE_Y + Math.abs(Math.sin(totalTime * 8.5)) * 0.45;
       }
 
       heroRig.root.position.set(hx, hy, 0);
       heroRig.root.rotation.z = hRotZ;
-      heroRig.rightArm.rotation.x = hRightArmX;
-      heroRig.leftArm.rotation.x = hLeftArmX;
-      heroRig.leftLeg.rotation.x = hLegSwing;
-      heroRig.rightLeg.rotation.x = -hLegSwing;
+      if (usePoseSolver) {
+        applyHeroWeaponPose(heroRig, activeWeapon, hasWeapon, {
+          speed: poseSpeed,
+          walkCycle: poseWalkCycle,
+          aimAlpha: poseAimAlpha,
+          recoil: poseRecoil,
+          dt,
+          elapsed: totalTime,
+        });
+      }
 
       monsterGroup.position.set(mx, my, 0);
       monsterGroup.rotation.z = mRotZ;
       monsterGroup.scale.setScalar(mScale);
+      animateMonsterRig(monsterGroup, {
+        mode: monMode,
+        elapsed: totalTime,
+        phase: 1.1,
+        attackProgress: monAttackProg,
+        dt,
+      });
 
       // Update sparks & confetti physics
       for (let i = sparks.length - 1; i >= 0; i--) {
@@ -321,12 +361,13 @@ export const BattleArenaCanvas: React.FC<BattleArenaCanvasProps> = ({
       monProjMat.dispose();
       confettiMats.forEach((m) => m.dispose());
       palette.dispose();
+      envTex.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) {
         host.removeChild(renderer.domElement);
       }
     };
-  }, [monsterType, isBoss]);
+  }, [monsterType, isBoss, activeWeapon, hasWeapon]);
 
   return <div ref={containerRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
 };

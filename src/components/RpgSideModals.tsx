@@ -42,6 +42,7 @@ import {
 
 import { GuideTabContent } from './GuideTabContent';
 import { Kingdom3DMap, SpotLegendIcon } from './RadarMinimap';
+import { WeaponPreviewCanvas } from './WeaponPreviewCanvas';
 import { RadarBlipKind } from '../types/game';
 
 export type SideModalTab = 'bag' | 'kamus' | 'quests' | 'map' | 'options' | 'guide' | null;
@@ -79,6 +80,7 @@ export const RpgSideModals: React.FC<RpgSideModalsProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'learn' | 'mast'>('all');
   const [selectedCat, setSelectedCat] = useState<number | 'all'>('all');
   const [showRpgHelp, setShowRpgHelp] = useState(false);
+  const [previewWeapon, setPreviewWeapon] = useState<WeaponId | null>(null);
 
   const filteredWords = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -179,26 +181,67 @@ export const RpgSideModals: React.FC<RpgSideModalsProps> = ({
                 </div>
               </div>
 
-              {/* 7 Weapons Grid */}
+              {/* 8 Weapons 3D Interactive Showcase + Grid */}
               <div>
                 <h3 className="mb-2 text-xs font-black uppercase tracking-wider text-[#78350f]">
-                  Koleksi Senjata ({hud.ownedWeapons.length}/8)
+                  Koleksi Senjata 3D ({hud.ownedWeapons.length}/8)
                 </h3>
+
+                {/* 3D Interactive Turntable Showcase */}
+                {(() => {
+                  const inspectedId = previewWeapon ?? hud.activeWeapon;
+                  const inspectedDef = WEAPONS[inspectedId];
+                  const inspectedOwned = hud.ownedWeapons.includes(inspectedId);
+                  return (
+                    <div className="mb-3 overflow-hidden rounded-2xl border-2 border-[#78350f]/60 bg-gradient-to-br from-slate-900 via-[#162036] to-slate-950 text-white shadow-inner">
+                      <div className="flex items-center justify-between border-b border-white/10 px-3.5 py-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 shrink-0 rounded-full border border-white/70"
+                              style={{ backgroundColor: inspectedDef.color }}
+                            />
+                            <span className="truncate text-sm font-black text-amber-200">
+                              {inspectedDef.name}
+                            </span>
+                            {!inspectedOwned && (
+                              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-300">
+                                Terkunci
+                              </span>
+                            )}
+                          </div>
+                          <div className="truncate text-[11px] font-medium text-slate-300">
+                            {inspectedDef.desc}
+                          </div>
+                        </div>
+                        <span className="hidden shrink-0 rounded-lg border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-200 sm:inline-block">
+                          Geser untuk Putar 360°
+                        </span>
+                      </div>
+                      <WeaponPreviewCanvas weaponId={inspectedId} owned={inspectedOwned} />
+                    </div>
+                  );
+                })()}
+
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {WEAPON_ORDER.map((wId) => {
                     const w = WEAPONS[wId];
                     const owned = hud.ownedWeapons.includes(wId);
                     const equipped = hud.activeWeapon === wId && owned;
+                    const inspected = (previewWeapon ?? hud.activeWeapon) === wId;
                     const ammo = hud.weaponAmmo[wId] || 0;
                     return (
                       <div
                         key={wId}
-                        className={`flex items-center justify-between rounded-2xl border-2 p-3 ${
+                        onClick={() => setPreviewWeapon(wId)}
+                        className={`flex cursor-pointer items-center justify-between rounded-2xl border-2 p-3 transition ${
                           equipped
                             ? 'border-emerald-600 bg-emerald-50'
+                            : inspected
+                            ? 'border-amber-500 bg-amber-50/90'
                             : owned
-                            ? 'border-[#d6b67c] bg-white'
-                            : 'border-[#d6c29f] bg-[#f5ebd6]/70 opacity-65'
+                            ? 'border-[#d6b67c] bg-white hover:border-amber-500/80'
+                            : 'border-[#d6c29f] bg-[#f5ebd6]/75 opacity-80 hover:opacity-95'
                         }`}
                       >
                         <div className="min-w-0 pr-2">
@@ -224,7 +267,11 @@ export const RpgSideModals: React.FC<RpgSideModalsProps> = ({
                         {owned ? (
                           <button
                             type="button"
-                            onClick={() => onEquipWeapon(wId)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewWeapon(wId);
+                              onEquipWeapon(wId);
+                            }}
                             disabled={equipped}
                             className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-black ${
                               equipped

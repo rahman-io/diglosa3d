@@ -409,6 +409,11 @@ export interface RpgHudSnapshot {
     hp: number;
     maxHp: number;
   } | null;
+  isAiming: boolean;
+  hitMarkerKind: 'none' | 'hit' | 'kill';
+  crosshairOnEnemy: boolean;
+  crosshairSpread: number;
+  pointerLocked: boolean;
 }
 
 export interface LeaderboardRecord {

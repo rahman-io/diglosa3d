@@ -61,10 +61,17 @@ import {
   createMinecraftVillageWorld,
   MinecraftVillageRig,
   updateMinecraftVillage,
+  VillageObstacle,
 } from './minecraftVillage';
 import {
   AcademyHallRig,
+  animateCaptiveMesh,
+  animateMonsterRig,
+  animateShooterRig,
+  animateZoneNpc,
+  applyHeroWeaponPose,
   CaveBlockDef,
+  computeBlinkScale,
   createAcademyHallEnvironment,
   createAreaMists,
   createCaveTntMesh,
@@ -82,6 +89,7 @@ import {
   createZoneNpc,
   DungeonArenaRig,
   FirstPersonViewRig,
+  getWeaponPoseClass,
   getZoneForPosition,
   HeroAvatarRig,
   OwlMessengerRig,
@@ -135,6 +143,8 @@ interface RoamingMonster {
   patrolPhase: number;
   angryTimer: number;
   stanceHp?: number;
+  walkPhase?: number;
+  attackAnimTimer?: number;
 }
 
 interface CaveActiveTnt {
@@ -163,6 +173,11 @@ interface EnemyShooter {
   hp: number;
   cooldown: number;
   phase: number;
+  walkPhase: number;
+  recoilTimer: number;
+  hitSquashTimer: number;
+  prevX: number;
+  prevZ: number;
   mesh: THREE.Group;
   alive: boolean;
   respawnTimer: number;
@@ -172,8 +187,10 @@ interface Projectile3D {
   active: boolean;
   fromPlayer: boolean;
   x: number;
+  y?: number;
   z: number;
   vx: number;
+  vy: number;
   vz: number;
   damage: number;
   shieldDamage: number;
@@ -240,6 +257,8 @@ const _right = new THREE.Vector3();
 const _proj = new THREE.Vector3();
 const _dummy = new THREE.Object3D();
 const _color = new THREE.Color();
+const _centerNdc = new THREE.Vector2(0, 0);
+const _aimPoint = new THREE.Vector3();
 
 function todayKey(): string {
   const d = new Date();
@@ -308,6 +327,7 @@ export class RpgWorldEngine {
   private worldMode: WorldLocationMode = 'overworld';
   private overworldGroup: THREE.Group;
   private villageRig!: MinecraftVillageRig;
+  private extraVillageColliders: VillageObstacle[] = [];
   private dungeonRig: DungeonArenaRig | null = null;
   private academyRig: AcademyHallRig | null = null;
   private dungeonAnimatables: THREE.Object3D[] = [];
@@ -382,6 +402,20 @@ export class RpgWorldEngine {
   private thirdPersonDist = 7.8;
   private activeHotbarSlot = 0;
   private fpSwingTimer = 0;
+  private shootAimTimer = 0;
+  private shootRecoilTimer = 0;
+  private isAiming = false;
+  private aimToggled = false;
+  private rightAimHeld = false;
+  private leftFireHeld = false;
+  private hudFireHeld = false;
+  private aimBlend = 0;
+  private recoilPitch = 0;
+  private crosshairSpread = 0;
+  private hitMarkerTimer = 0;
+  private hitMarkerKind: 'none' | 'hit' | 'kill' = 'none';
+  private crosshairOnEnemy = false;
+  private pointerLocked = false;
   private xp = 0;
   private hp = TUNE.hpStart;
   private maxHp = TUNE.hpStart;
@@ -560,12 +594,12 @@ export class RpgWorldEngine {
 
     this.hero = createHeroAvatar(this.palette);
     this.hero.root.position.copy(this.heroPos);
-    setHeroWeaponVisual(this.hero, WEAPONS.ketapel.colorHex, false);
+    setHeroWeaponVisual(this.hero, 'ketapel', false);
     this.scene.add(this.hero.root);
 
     this.fpViewRig = createFirstPersonViewRig(this.palette);
     this.fpViewRig.root.visible = false;
-    setFirstPersonHeldVisual(this.fpViewRig, 'bare', WEAPONS.ketapel.colorHex);
+    setFirstPersonHeldVisual(this.fpViewRig, 'bare', 'ketapel');
     this.camera.add(this.fpViewRig.root);
 
     this.owlRig = createOwlMessengerRig(this.palette);
@@ -840,6 +874,26 @@ export class RpgWorldEngine {
 
     // Living Minecraft Village, Villagers, Iron Golems, Farm, Market, Pillager Outpost & Forest
     this.villageRig = createMinecraftVillageWorld(this.palette);
+    this.villageRig.obstacles.push(
+      // Desa Sapaan cottages
+      { x: -33, z: -2, halfW: 3.8, halfD: 3.6 },
+      { x: -34, z: 14, halfW: 3.7, halfD: 3.5 },
+      // Pasar Rasa market stall + cauldron + crafting bench
+      { x: -31, z: 29, halfW: 4.4, halfD: 4.1 },
+      // Menara Waktu cobblestone clock tower
+      { x: -29, z: -27, halfW: 3.5, halfD: 3.8 },
+      // Gerbang Kota stone piers (center archway stays open!)
+      { x: -4.0, z: 32.5, halfW: 0.72, halfD: 0.72 },
+      { x: 4.0, z: 32.5, halfW: 0.72, halfD: 0.72 },
+      // Hutan Satwa ranger cabin
+      { x: 33, z: -18, halfW: 3.8, halfD: 3.6 },
+      // Portal Arch stone piers (portal doorway stays passable!)
+      { x: -1.9, z: -33, halfW: 1.15, halfD: 1.25 },
+      { x: 5.9, z: -33, halfW: 1.15, halfD: 1.25 },
+      // Cliff & waterfall pond rim
+      { x: -47, z: -14, halfW: 4.2, halfD: 3.2 },
+      { x: -41, z: -10, halfW: 7.4, halfD: 7.4 },
+    );
     this.overworldGroup.add(this.villageRig.group);
     this.overworldClickables.push(...this.villageRig.clickables);
   }
@@ -905,8 +959,10 @@ export class RpgWorldEngine {
         active: false,
         fromPlayer: true,
         x: 0,
+        y: 1.35,
         z: 0,
         vx: 0,
+        vy: 0,
         vz: 0,
         damage: 1,
         shieldDamage: 1,
@@ -965,6 +1021,11 @@ export class RpgWorldEngine {
         hp: 3,
         cooldown: 1.5 + i * 0.7,
         phase: i * 1.4,
+        walkPhase: i * 1.4,
+        recoilTimer: 0,
+        hitSquashTimer: 0,
+        prevX: sx,
+        prevZ: sz,
         mesh,
         alive: true,
         respawnTimer: 0,
@@ -1037,23 +1098,22 @@ export class RpgWorldEngine {
   }
 
   private refreshWeaponVisual(): void {
-    const w = WEAPONS[this.activeWeapon];
     const hasEquippedWeapon =
       this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon);
-    setHeroWeaponVisual(this.hero, w.colorHex, hasEquippedWeapon);
+    setHeroWeaponVisual(this.hero, this.activeWeapon, hasEquippedWeapon);
 
     if (this.activeHotbarSlot === 8) {
-      setFirstPersonHeldVisual(this.fpViewRig, 'pickaxe', w.colorHex, this.pickaxeTier);
+      setFirstPersonHeldVisual(this.fpViewRig, 'pickaxe', this.activeWeapon, this.pickaxeTier);
     } else if (this.activeHotbarSlot === 9) {
-      setFirstPersonHeldVisual(this.fpViewRig, 'torch', w.colorHex, this.pickaxeTier);
+      setFirstPersonHeldVisual(this.fpViewRig, 'torch', this.activeWeapon, this.pickaxeTier);
     } else if (this.activeHotbarSlot === 10) {
-      setFirstPersonHeldVisual(this.fpViewRig, 'shield_block', w.colorHex, this.pickaxeTier);
+      setFirstPersonHeldVisual(this.fpViewRig, 'shield_block', this.activeWeapon, this.pickaxeTier);
     } else if (this.activeHotbarSlot === 11) {
-      setFirstPersonHeldVisual(this.fpViewRig, 'tnt', w.colorHex, this.pickaxeTier);
+      setFirstPersonHeldVisual(this.fpViewRig, 'tnt', this.activeWeapon, this.pickaxeTier);
     } else if (hasEquippedWeapon) {
-      setFirstPersonHeldVisual(this.fpViewRig, 'weapon', w.colorHex, this.pickaxeTier);
+      setFirstPersonHeldVisual(this.fpViewRig, 'weapon', this.activeWeapon, this.pickaxeTier);
     } else {
-      setFirstPersonHeldVisual(this.fpViewRig, 'bare', w.colorHex, this.pickaxeTier);
+      setFirstPersonHeldVisual(this.fpViewRig, 'bare', this.activeWeapon, this.pickaxeTier);
     }
 
     this.starterPickupMesh.visible = !this.starterWeaponPicked;
@@ -1596,8 +1656,10 @@ export class RpgWorldEngine {
     this.hero.root.position.copy(this.heroPos);
     this.hero.leftLeg.rotation.x = 0;
     this.hero.rightLeg.rotation.x = 0;
-    this.hero.leftArm.rotation.x = 0;
-    this.hero.rightArm.rotation.x = 0;
+    this.hero.leftArm.rotation.set(0, 0, 0);
+    this.hero.rightArm.rotation.set(0, 0, 0);
+    this.hero.upperBody.rotation.set(0, 0, 0);
+    this.hero.headGroup.rotation.set(0, 0, 0);
     this.hero.body.position.y = 0;
     this.applyCameraVisibilityAndControls();
     this.snapCameraBehindHero();
@@ -2394,8 +2456,64 @@ export class RpgWorldEngine {
     this.phase = next;
     this.heldKeys.clear();
     this.lookPointer = null;
+    if (next !== 'playing') {
+      this.isAiming = false;
+      this.aimToggled = false;
+      this.rightAimHeld = false;
+      this.leftFireHeld = false;
+      this.hudFireHeld = false;
+      if (document.pointerLockElement === this.renderer.domElement) {
+        try {
+          document.exitPointerLock?.();
+        } catch {
+          // ignore
+        }
+      }
+    }
     this.applyCameraVisibilityAndControls();
     this.pushHud(true);
+  }
+
+  public toggleAimMode(): void {
+    if (this.phase !== 'playing') return;
+    if (this.activeHotbarSlot > 7 || !this.ownedWeapons.has(this.activeWeapon)) {
+      this.showBanner('Pilih senjata terlebih dahulu untuk membidik (ADS)!', 2.0);
+      return;
+    }
+    this.aimToggled = !this.aimToggled;
+    this.isAiming = this.aimToggled || this.rightAimHeld;
+    soundEngine.playPick();
+    this.pushHud(true);
+  }
+
+  public setFireHeld(held: boolean): void {
+    this.hudFireHeld = held;
+    if (held && this.phase === 'playing') {
+      this.fireActiveWeapon(false);
+    }
+  }
+
+  public togglePointerLock(): void {
+    if (this.phase !== 'playing') return;
+    const dom = this.renderer.domElement;
+    if (document.pointerLockElement === dom) {
+      try {
+        document.exitPointerLock?.();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    try {
+      const res = dom.requestPointerLock?.() as unknown as Promise<void> | undefined;
+      if (res && typeof res.catch === 'function') {
+        res.catch(() => {
+          this.showBanner('Geser layar dengan mouse/jari untuk membidik, klik kiri/Spasi untuk menembak!', 2.6);
+        });
+      }
+    } catch {
+      this.showBanner('Geser layar dengan mouse/jari untuk membidik!', 2.4);
+    }
   }
 
   public toggleCameraMode(): void {
@@ -2705,6 +2823,11 @@ export class RpgWorldEngine {
         hp: 3,
         cooldown: 1.3 + i * 0.6,
         phase: i * 1.9,
+        walkPhase: i * 1.9,
+        recoilTimer: 0,
+        hitSquashTimer: 0,
+        prevX: gx,
+        prevZ: gz,
         mesh: gMesh,
         alive: true,
         respawnTimer: 0,
@@ -3564,6 +3687,7 @@ export class RpgWorldEngine {
     m.z = THREE.MathUtils.clamp(m.z + (dirZ / len) * 1.15, -18, 18);
     soundEngine.playHit();
     this.spawnBurst(m.x, (m.y ?? 0) + 1.3, m.z, m.combatOnly ? 0xef4444 : 0x22c55e, 12);
+    this.triggerHitMarker(m.mobHp <= 0);
 
     if (m.mobHp <= 0) {
       this.handleRealTimeMonsterDefeated(m);
@@ -4032,42 +4156,160 @@ export class RpgWorldEngine {
     this.pushHud(true);
   }
 
-  public fireActiveWeapon(): void {
+  private triggerHitMarker(isKill: boolean): void {
+    this.hitMarkerTimer = 0.2;
+    this.hitMarkerKind = isKill ? 'kill' : 'hit';
+  }
+
+  private getCrosshairAimInfo(): { point: THREE.Vector3; hitEnemy: boolean } {
+    this.raycaster.setFromCamera(_centerNdc, this.camera);
+    const ro = this.raycaster.ray.origin;
+    const rd = this.raycaster.ray.direction;
+    const heroDepth =
+      (this.heroPos.x - ro.x) * rd.x +
+      (this.heroPos.y + 1.4 - ro.y) * rd.y +
+      (this.heroPos.z - ro.z) * rd.z;
+
+    let bestT = 65;
+    let hitEnemy = false;
+
+    // 1. Check Shooters under crosshair ray
+    for (const s of this.shooters) {
+      if (!s.alive) continue;
+      const tx = s.x - ro.x;
+      const ty = 1.38 - ro.y;
+      const tz = s.z - ro.z;
+      const t = tx * rd.x + ty * rd.y + tz * rd.z;
+      if (t > heroDepth + 0.35 && t < bestT) {
+        const px = ro.x + rd.x * t - s.x;
+        const py = ro.y + rd.y * t - 1.38;
+        const pz = ro.z + rd.z * t - s.z;
+        if (px * px + py * py + pz * pz < 0.98 * 0.98) {
+          bestT = t;
+          hitEnemy = true;
+        }
+      }
+    }
+
+    // 2. Check Monsters (ground & flying bats) under crosshair ray
+    for (const m of this.getActiveMonsters()) {
+      if (!m.alive || m.angryTimer > 0) continue;
+      const cy = (m.y ?? (m.type === 'kelelawar_gua' ? 3.4 : 0)) + (m.isBoss ? 1.85 : 1.15);
+      const rad = m.isBoss ? 1.65 : m.type === 'kelelawar_gua' ? 1.15 : 1.18;
+      const tx = m.x - ro.x;
+      const ty = cy - ro.y;
+      const tz = m.z - ro.z;
+      const t = tx * rd.x + ty * rd.y + tz * rd.z;
+      if (t > heroDepth + 0.35 && t < bestT) {
+        const px = ro.x + rd.x * t - m.x;
+        const py = ro.y + rd.y * t - cy;
+        const pz = ro.z + rd.z * t - m.z;
+        if (px * px + py * py + pz * pz < rad * rad) {
+          bestT = t;
+          hitEnemy = true;
+        }
+      }
+    }
+
+    // 3. Check Dungeon walls & blocks so aiming at cover stops right on the surface
+    if (this.worldMode === 'dungeon' && this.dungeonRig) {
+      for (const col of this.dungeonRig.caveColliders) {
+        const tWall = this.rayIntersectAabbDist(
+          ro.x,
+          ro.y,
+          ro.z,
+          rd.x,
+          rd.y,
+          rd.z,
+          bestT,
+          col.x - col.halfW,
+          col.x + col.halfW,
+          0,
+          6.5,
+          col.z - col.halfW,
+          col.z + col.halfW,
+        );
+        if (tWall !== null && tWall > heroDepth + 0.35 && tWall < bestT) {
+          bestT = tWall;
+          hitEnemy = false;
+        }
+      }
+      for (const blk of this.dungeonRig.caveBlocks) {
+        if (!blk.alive || blk.kind === 'player_shield') continue;
+        const tBlk = this.rayIntersectAabbDist(
+          ro.x,
+          ro.y,
+          ro.z,
+          rd.x,
+          rd.y,
+          rd.z,
+          bestT,
+          blk.x - blk.halfW,
+          blk.x + blk.halfW,
+          blk.y - 0.85,
+          blk.y + 0.85,
+          blk.z - blk.halfW,
+          blk.z + blk.halfW,
+        );
+        if (tBlk !== null && tBlk > heroDepth + 0.35 && tBlk < bestT) {
+          bestT = tBlk;
+          hitEnemy = false;
+        }
+      }
+    }
+
+    // 4. Ground plane stop if aiming downward at ground
+    if (!hitEnemy && rd.y < -0.01) {
+      const tGround = -ro.y / rd.y;
+      if (tGround > heroDepth + 0.5 && tGround < bestT) {
+        bestT = tGround;
+      }
+    }
+
+    _aimPoint.set(ro.x + rd.x * bestT, ro.y + rd.y * bestT, ro.z + rd.z * bestT);
+    return { point: _aimPoint, hitEnemy };
+  }
+
+  public fireActiveWeapon(fromHold = false): void {
     if (this.phase !== 'playing') return;
 
     if (this.activeHotbarSlot === 8) {
-      this.mineTargetedBlock();
+      if (!fromHold) this.mineTargetedBlock();
       return;
     }
     if (this.activeHotbarSlot === 9) {
-      this.placeCaveTorch();
+      if (!fromHold) this.placeCaveTorch();
       return;
     }
     if (this.activeHotbarSlot === 10) {
-      this.placeShieldBlock();
+      if (!fromHold) this.placeShieldBlock();
       return;
     }
     if (this.activeHotbarSlot === 11) {
-      this.placeAndTriggerTnt();
+      if (!fromHold) this.placeAndTriggerTnt();
       return;
     }
 
     if (this.ownedWeapons.size === 0) {
-      this.showBanner(
-        '🔎 Belum punya senjata! Ikuti cahaya biru ke kiri Alun-Alun untuk mengambil Senjata Pertamamu!',
-        3.2,
-      );
-      soundEngine.playNo();
+      if (!fromHold) {
+        this.showBanner(
+          '🔎 Belum punya senjata! Ikuti cahaya biru ke kiri Alun-Alun untuk mengambil Senjata Pertamamu!',
+          3.2,
+        );
+        soundEngine.playNo();
+      }
       return;
     }
 
     const slotWeapon = WEAPON_ORDER[this.activeHotbarSlot];
     if (slotWeapon && !this.ownedWeapons.has(slotWeapon)) {
-      this.showBanner(
-        `${WEAPONS[slotWeapon].name} belum terbuka! (${WEAPONS[slotWeapon].originLabel})`,
-        2.8,
-      );
-      soundEngine.playNo();
+      if (!fromHold) {
+        this.showBanner(
+          `${WEAPONS[slotWeapon].name} belum terbuka! (${WEAPONS[slotWeapon].originLabel})`,
+          2.8,
+        );
+        soundEngine.playNo();
+      }
       return;
     }
 
@@ -4075,6 +4317,7 @@ export class RpgWorldEngine {
 
     const wDef = WEAPONS[this.activeWeapon];
     if ((this.weaponAmmo[this.activeWeapon] || 0) <= 0) {
+      if (fromHold) return;
       this.fireCooldown = 0.35;
       this.fpSwingTimer = 0.2;
       if (this.performCaveMeleeStrike(1)) {
@@ -4090,38 +4333,78 @@ export class RpgWorldEngine {
     this.weaponAmmo[this.activeWeapon] -= 1;
     this.fireCooldown = wDef.cooldown;
     this.fpSwingTimer = 0.2;
+    this.shootAimTimer = 1.25;
+    this.shootRecoilTimer = 0.22;
     soundEngine.playShoot();
 
-    // Auto-Aim within 34 units toward nearest Shooter or Word Monster
-    let aimYaw = this.heroYaw;
-    let bestDist = TUNE.autoAimRange;
-    for (const s of this.shooters) {
-      if (!s.alive) continue;
-      const d = Math.hypot(s.x - this.heroPos.x, s.z - this.heroPos.z);
-      if (d < bestDist) {
-        bestDist = d;
-        aimYaw = Math.atan2(s.x - this.heroPos.x, s.z - this.heroPos.z);
-      }
-    }
-    for (const m of this.getActiveMonsters()) {
-      if (!m.alive) continue;
-      const d = Math.hypot(m.x - this.heroPos.x, m.z - this.heroPos.z);
-      if (d < bestDist) {
-        bestDist = d;
-        aimYaw = Math.atan2(m.x - this.heroPos.x, m.z - this.heroPos.z);
-      }
-    }
-    this.heroYaw = aimYaw;
+    const kick = wDef.cooldown >= 0.4 ? 0.032 : wDef.cooldown >= 0.25 ? 0.02 : 0.012;
+    this.recoilPitch = Math.min(0.14, this.recoilPitch + kick * (this.isAiming ? 0.65 : 1.0));
+    this.crosshairSpread = Math.min(
+      1.0,
+      this.crosshairSpread + (wDef.cooldown >= 0.4 ? 0.68 : 0.35),
+    );
 
-    const angles = wDef.spread === 3 ? [-0.22, 0, 0.22] : [0];
+    const poseCls = getWeaponPoseClass(this.activeWeapon);
+    const muzzleHeight =
+      this.cameraMode === 'first_person'
+        ? 2.28
+        : poseCls === 'heavy_gatling'
+        ? 1.48
+        : poseCls === 'rifle_twohand'
+        ? 1.88
+        : 1.92;
+    const muzzleDist =
+      poseCls === 'rifle_twohand' || poseCls === 'heavy_gatling' ? 1.45 : 1.15;
+
+    let aimYaw = this.heroYaw;
+    let dirX = Math.sin(aimYaw);
+    let dirY = 0;
+    let dirZ = Math.cos(aimYaw);
+
+    // PUBG-style manual crosshair aiming in TPS & FPS views!
+    if (this.cameraMode === 'third_back' || this.cameraMode === 'first_person') {
+      const aim = this.getCrosshairAimInfo();
+      aimYaw = Math.atan2(aim.point.x - this.heroPos.x, aim.point.z - this.heroPos.z);
+      this.heroYaw = aimYaw;
+
+      const mx0 = this.heroPos.x + Math.sin(aimYaw) * muzzleDist;
+      const my0 = this.heroPos.y + muzzleHeight;
+      const mz0 = this.heroPos.z + Math.cos(aimYaw) * muzzleDist;
+      _v1.set(aim.point.x - mx0, aim.point.y - my0, aim.point.z - mz0);
+      const len = _v1.length();
+      if (len > 0.08) {
+        _v1.divideScalar(len);
+        dirX = _v1.x;
+        dirY = _v1.y;
+        dirZ = _v1.z;
+      } else {
+        dirX = Math.sin(aimYaw);
+        dirY = 0;
+        dirZ = Math.cos(aimYaw);
+      }
+    }
+
+    const muzzleX = this.heroPos.x + Math.sin(aimYaw) * muzzleDist;
+    const muzzleY = this.heroPos.y + muzzleHeight;
+    const muzzleZ = this.heroPos.z + Math.cos(aimYaw) * muzzleDist;
+
+    // Subtle bright muzzle spark right at barrel exit
+    this.spawnBurst(muzzleX, muzzleY, muzzleZ, wDef.colorHex, 5);
+
+    const angles = wDef.spread === 3 ? [-0.14, 0, 0.14] : [0];
     for (const offset of angles) {
-      const a = aimYaw + offset;
+      const cosO = Math.cos(offset);
+      const sinO = Math.sin(offset);
+      const rx = dirX * cosO + dirZ * sinO;
+      const rz = -dirX * sinO + dirZ * cosO;
       this.spawnProjectile({
         fromPlayer: true,
-        x: this.heroPos.x + Math.sin(a) * 1.1,
-        z: this.heroPos.z + Math.cos(a) * 1.1,
-        vx: Math.sin(a) * wDef.speed,
-        vz: Math.cos(a) * wDef.speed,
+        x: muzzleX,
+        y: muzzleY,
+        z: muzzleZ,
+        vx: rx * wDef.speed,
+        vy: dirY * wDef.speed,
+        vz: rz * wDef.speed,
         damage: wDef.damage,
         shieldDamage: wDef.shieldDamage,
         pierceLeft: wDef.pierce || 0,
@@ -4134,8 +4417,10 @@ export class RpgWorldEngine {
   private spawnProjectile(opts: {
     fromPlayer: boolean;
     x: number;
+    y?: number;
     z: number;
     vx: number;
+    vy?: number;
     vz: number;
     damage: number;
     shieldDamage: number;
@@ -4147,8 +4432,10 @@ export class RpgWorldEngine {
     slot.active = true;
     slot.fromPlayer = opts.fromPlayer;
     slot.x = opts.x;
+    slot.y = opts.y ?? 1.35;
     slot.z = opts.z;
     slot.vx = opts.vx;
+    slot.vy = opts.vy ?? 0;
     slot.vz = opts.vz;
     slot.damage = opts.damage;
     slot.shieldDamage = opts.shieldDamage;
@@ -4157,7 +4444,7 @@ export class RpgWorldEngine {
     slot.life = 1.45;
     (slot.mesh.material as THREE.MeshBasicMaterial).color.setHex(opts.colorHex);
     slot.mesh.scale.setScalar(opts.damage > 1 ? 1.45 : 1.0);
-    slot.mesh.position.set(opts.x, 1.35, opts.z);
+    slot.mesh.position.set(opts.x, slot.y, opts.z);
     slot.mesh.visible = true;
   }
 
@@ -4195,17 +4482,33 @@ export class RpgWorldEngine {
     this.pushHud(true);
   }
 
+  private onPointerLockChange = (): void => {
+    this.pointerLocked = document.pointerLockElement === this.renderer.domElement;
+    if (!this.pointerLocked) {
+      this.leftFireHeld = false;
+    }
+    this.pushHud(true);
+  };
+
+  private onContextMenu = (e: MouseEvent): void => {
+    if (this.phase === 'playing') {
+      e.preventDefault();
+    }
+  };
+
   private bindEvents(): void {
     window.addEventListener('resize', this.onResize);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onWindowBlur);
+    document.addEventListener('pointerlockchange', this.onPointerLockChange);
     const dom = this.renderer.domElement;
     dom.addEventListener('pointerdown', this.onPointerDown);
     dom.addEventListener('pointermove', this.onPointerMove);
     dom.addEventListener('pointerup', this.onPointerUp);
     dom.addEventListener('pointercancel', this.onPointerCancel);
     dom.addEventListener('wheel', this.onWheel, { passive: false });
+    dom.addEventListener('contextmenu', this.onContextMenu);
   }
 
   private onResize = (): void => {
@@ -4220,6 +4523,10 @@ export class RpgWorldEngine {
   private onWindowBlur = (): void => {
     this.heldKeys.clear();
     this.lookPointer = null;
+    this.rightAimHeld = false;
+    this.leftFireHeld = false;
+    this.hudFireHeld = false;
+    this.isAiming = this.aimToggled;
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -4248,6 +4555,16 @@ export class RpgWorldEngine {
         this.selectHotbarSlot(11);
         return;
       }
+      if (e.code === 'KeyQ' || e.code === 'KeyV') {
+        e.preventDefault();
+        this.toggleAimMode();
+        return;
+      }
+      if (e.code === 'KeyL') {
+        e.preventDefault();
+        this.togglePointerLock();
+        return;
+      }
       if (e.code === 'KeyJ' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         e.preventDefault();
         this.jumpHero();
@@ -4259,7 +4576,7 @@ export class RpgWorldEngine {
       } else if (e.code === 'Space') {
         e.preventDefault();
         if (this.activeHotbarSlot >= 8 || this.ownedWeapons.size > 0) {
-          this.fireActiveWeapon();
+          this.fireActiveWeapon(false);
         } else {
           this.triggerPrimaryAction();
         }
@@ -4296,6 +4613,30 @@ export class RpgWorldEngine {
 
   private onPointerDown = (e: PointerEvent): void => {
     if (this.phase !== 'playing') return;
+    if (e.button === 2) {
+      if (this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon)) {
+        this.rightAimHeld = true;
+        this.isAiming = true;
+      }
+      if (this.lookPointer === null) {
+        this.lookPointer = {
+          id: e.pointerId,
+          startX: e.clientX,
+          startY: e.clientY,
+          lastX: e.clientX,
+          lastY: e.clientY,
+          moved: false,
+        };
+      }
+      return;
+    }
+
+    if (e.button === 0 && document.pointerLockElement === this.renderer.domElement) {
+      this.leftFireHeld = true;
+      this.fireActiveWeapon(false);
+      return;
+    }
+
     if (this.lookPointer === null) {
       this.lookPointer = {
         id: e.pointerId,
@@ -4311,11 +4652,13 @@ export class RpgWorldEngine {
   private onPointerMove = (e: PointerEvent): void => {
     if (this.phase !== 'playing' || this.cameraMode === 'orbit') return;
 
+    const sensScale = this.isAiming ? 0.65 : 1.0;
+
     if (document.pointerLockElement === this.renderer.domElement) {
-      this.cameraYaw -= e.movementX * 0.0045;
-      const minP = this.cameraMode === 'first_person' ? -1.1 : -0.36;
+      this.cameraYaw -= e.movementX * 0.0042 * sensScale;
+      const minP = this.cameraMode === 'first_person' ? -1.1 : -0.52;
       this.cameraPitch = THREE.MathUtils.clamp(
-        this.cameraPitch + e.movementY * 0.004,
+        this.cameraPitch + e.movementY * 0.0038 * sensScale,
         minP,
         1.12,
       );
@@ -4336,9 +4679,9 @@ export class RpgWorldEngine {
     }
 
     if (this.lookPointer.moved) {
-      const sens = e.pointerType === 'touch' ? 0.0072 : 0.0048;
+      const sens = (e.pointerType === 'touch' ? 0.0072 : 0.0048) * sensScale;
       this.cameraYaw -= dx * sens;
-      const minP = this.cameraMode === 'first_person' ? -1.1 : -0.36;
+      const minP = this.cameraMode === 'first_person' ? -1.1 : -0.52;
       this.cameraPitch = THREE.MathUtils.clamp(
         this.cameraPitch + dy * sens,
         minP,
@@ -4348,12 +4691,27 @@ export class RpgWorldEngine {
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
+    if (e.button === 2) {
+      this.rightAimHeld = false;
+      this.isAiming = this.aimToggled;
+    }
+    this.leftFireHeld = false;
     if (this.lookPointer?.id === e.pointerId) {
       this.lookPointer = null;
     }
   };
 
   private onPointerUp = (e: PointerEvent): void => {
+    if (e.button === 2) {
+      this.rightAimHeld = false;
+      this.isAiming = this.aimToggled;
+      if (this.lookPointer?.id === e.pointerId) {
+        this.lookPointer = null;
+      }
+      return;
+    }
+    this.leftFireHeld = false;
+
     const lp = this.lookPointer;
     if (lp && lp.id === e.pointerId) {
       this.lookPointer = null;
@@ -4362,6 +4720,16 @@ export class RpgWorldEngine {
       return;
     }
     if (this.phase !== 'playing') return;
+    if (document.pointerLockElement === this.renderer.domElement) return;
+
+    const hasArmedWeapon =
+      this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon);
+
+    // When in ADS / First-Person mode with a weapon, Left-Click shoots directly at crosshair!
+    if (hasArmedWeapon && (this.isAiming || this.cameraMode === 'first_person')) {
+      this.fireActiveWeapon(false);
+      return;
+    }
 
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointerNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -4541,8 +4909,7 @@ export class RpgWorldEngine {
           const m = this.getActiveMonsters().find((item) => item.id === obj!.userData.monsterId && item.alive);
           if (m) {
             if (m.combatOnly || m.isCaveMob) {
-              this.heroYaw = Math.atan2(m.x - this.heroPos.x, m.z - this.heroPos.z);
-              this.fireActiveWeapon();
+              this.fireActiveWeapon(false);
             } else {
               this.engageMonster(m);
             }
@@ -4552,7 +4919,13 @@ export class RpgWorldEngine {
       }
     }
 
-    // Tap-to-Move onto ground plane!
+    // With an armed weapon in TPS, clicking empty view fires at crosshair (PUBG style)!
+    // Otherwise (no weapon yet / orbit mode), Tap-to-Move onto ground plane.
+    if (hasArmedWeapon && this.cameraMode === 'third_back' && e.button === 0) {
+      this.fireActiveWeapon(false);
+      return;
+    }
+
     const groundHit = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.groundPlane, groundHit)) {
       this.tapMoveTarget = groundHit;
@@ -4633,6 +5006,13 @@ export class RpgWorldEngine {
       this.heroPos.lerpVectors(this.cutsceneStartPos, this.cutsceneTargetPos, t);
       this.hero.root.position.copy(this.heroPos);
 
+      const hBlink = computeBlinkScale(this.elapsed, 0.25);
+      this.hero.leftEye.scale.y = hBlink;
+      this.hero.rightEye.scale.y = hBlink;
+      const breathSy = 1 + Math.sin(this.elapsed * 2.5) * 0.04;
+      const breathSxz = 1 / Math.sqrt(breathSy);
+      this.hero.body.scale.set(breathSxz, breathSy, breathSxz);
+
       if (t < 1) {
         this.walkCycle += dt * 11;
         const swing = Math.sin(this.walkCycle) * 0.58;
@@ -4651,6 +5031,7 @@ export class RpgWorldEngine {
         this.hero.leftArm.rotation.x *= 0.8;
         this.hero.rightArm.rotation.x *= 0.8;
         this.hero.body.position.y = 0;
+        this.hero.headGroup.rotation.y = Math.sin(this.elapsed * 1.1) * 0.12;
         this.heroYaw = Math.atan2(
           this.dungeonRig.guardianPos.x - this.heroPos.x,
           this.dungeonRig.guardianPos.z - this.heroPos.z,
@@ -4658,6 +5039,8 @@ export class RpgWorldEngine {
       }
       this.hero.body.rotation.y = this.heroYaw;
       this.playerCaveLight.position.set(this.heroPos.x, 2.8, this.heroPos.z);
+      animateZoneNpc(this.dungeonRig.guardianMesh, this.elapsed, 0.5, true, dt);
+      animateCaptiveMesh(this.dungeonRig.captiveMesh, this.elapsed, false);
 
       _v1.set(0.2, 3.1, 16.2);
       this.camera.position.lerp(_v1, 1 - Math.exp(-3.2 * dt));
@@ -4672,6 +5055,14 @@ export class RpgWorldEngine {
         Math.abs(Math.sin(this.elapsed * 6.5)) * 0.34,
         11.8,
       );
+      animateZoneNpc(this.dungeonRig.guardianMesh, this.elapsed, 0.5, true, dt);
+      animateCaptiveMesh(this.dungeonRig.captiveMesh, this.elapsed, true);
+      const hBlink = computeBlinkScale(this.elapsed, 0.25);
+      this.hero.leftEye.scale.y = hBlink;
+      this.hero.rightEye.scale.y = hBlink;
+      const breathSy = 1 + Math.sin(this.elapsed * 2.5) * 0.042;
+      const breathSxz = 1 / Math.sqrt(breathSy);
+      this.hero.body.scale.set(breathSxz, breathSy, breathSxz);
       this.hero.leftLeg.rotation.x *= 0.8;
       this.hero.rightLeg.rotation.x *= 0.8;
       this.hero.body.position.y = 0;
@@ -4688,6 +5079,9 @@ export class RpgWorldEngine {
     const flap = Math.sin(this.elapsed * 16) * 0.65;
     this.owlRig.leftWing.rotation.z = flap;
     this.owlRig.rightWing.rotation.z = -flap;
+    const owlBlink = computeBlinkScale(this.elapsed, 0.9);
+    this.owlRig.leftEye.scale.y = owlBlink;
+    this.owlRig.rightEye.scale.y = owlBlink;
 
     if (this.owlState === 'fly') {
       const p = Math.min(1, this.storyTimer / 2.6);
@@ -4707,12 +5101,32 @@ export class RpgWorldEngine {
   private updateWorldAnimations(dt: number): void {
     this.waterUniforms.uTime.value = this.elapsed;
 
+    // Keep Hero breathing, blinking & alive even on title/story/dialogue/pause screens!
+    const inCaveCutscene =
+      this.phase === 'story' &&
+      (this.storyDialog?.kind === 'dungeon_intro' || this.storyDialog?.kind === 'dungeon_rescue');
+    if (this.phase !== 'playing' && !inCaveCutscene) {
+      const hasEquippedWeapon =
+        this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon);
+      applyHeroWeaponPose(this.hero, this.activeWeapon, hasEquippedWeapon, {
+        speed: 0,
+        walkCycle: this.walkCycle,
+        aimAlpha: 0,
+        recoil: 0,
+        dt,
+        elapsed: this.elapsed,
+      });
+    }
+
     // Owl leaving flight after story completes
     if (this.owlState === 'leave' && this.owlRig.root.visible) {
       this.storyTimer += dt;
       const flap = Math.sin(this.elapsed * 18) * 0.7;
       this.owlRig.leftWing.rotation.z = flap;
       this.owlRig.rightWing.rotation.z = -flap;
+      const owlBlink = computeBlinkScale(this.elapsed, 0.9);
+      this.owlRig.leftEye.scale.y = owlBlink;
+      this.owlRig.rightEye.scale.y = owlBlink;
       this.owlRig.root.position.y += dt * 12;
       this.owlRig.root.position.x += dt * 10;
       if (this.storyTimer > 1.4) {
@@ -4735,15 +5149,19 @@ export class RpgWorldEngine {
 
       // Gently restore mined block wobble, sync cracks, & flicker placed cave torch flames
       if (this.worldMode === 'dungeon' && this.dungeonRig) {
+        const gDist = Math.hypot(
+          this.heroPos.x - this.dungeonRig.guardianPos.x,
+          this.heroPos.z - this.dungeonRig.guardianPos.z,
+        );
+        animateZoneNpc(this.dungeonRig.guardianMesh, this.elapsed, 0.5, gDist < 4.5, dt);
         if (!this.dungeonState?.liberated) {
-          this.dungeonRig.guardianMesh.rotation.z = Math.sin(this.elapsed * 9) * 0.04;
-          this.dungeonRig.guardianMesh.position.y = Math.abs(Math.sin(this.elapsed * 2.5)) * 0.04;
+          animateCaptiveMesh(this.dungeonRig.captiveMesh, this.elapsed, false);
         } else {
-          this.dungeonRig.guardianMesh.rotation.z = 0;
-          this.dungeonRig.guardianMesh.position.y = Math.abs(Math.sin(this.elapsed * 4.2)) * 0.12;
+          this.dungeonRig.guardianMesh.position.y = Math.abs(Math.sin(this.elapsed * 4.2)) * 0.1;
           if (this.phase !== 'story') {
             this.dungeonRig.captiveMesh.position.y =
               Math.abs(Math.sin(this.elapsed * 5.0 + 0.7)) * 0.14;
+            animateCaptiveMesh(this.dungeonRig.captiveMesh, this.elapsed, true);
           }
         }
         for (const blk of this.dungeonRig.caveBlocks) {
@@ -4763,6 +5181,13 @@ export class RpgWorldEngine {
           }
         });
         this.updateDungeonHazards(dt);
+      } else if (this.worldMode === 'academy') {
+        let acIdx = 0;
+        for (const npc of this.academyNpcs.values()) {
+          const isNear = Math.hypot(this.heroPos.x - npc.x, this.heroPos.z - npc.z) < 4.2;
+          animateZoneNpc(npc.mesh, this.elapsed, acIdx * 1.15, isNear, dt);
+          acIdx++;
+        }
       }
     }
 
@@ -4789,9 +5214,14 @@ export class RpgWorldEngine {
       }
       if (m.angryTimer > 0) {
         m.angryTimer -= dt;
-        m.mesh.scale.setScalar((m.isBoss ? 1.65 : 1.0) * (1 + Math.sin(this.elapsed * 30) * 0.12));
+        m.mesh.scale.setScalar(m.isBoss ? 1.65 : 1.0);
+        animateMonsterRig(m.mesh, {
+          mode: 'windup',
+          elapsed: this.elapsed,
+          phase: m.patrolPhase,
+          dt,
+        });
         if (m.angryTimer <= 0) {
-          m.mesh.scale.setScalar(m.isBoss ? 1.65 : 1.0);
           this.engageMonster(m);
         }
         continue;
@@ -4823,6 +5253,12 @@ export class RpgWorldEngine {
               const swell = 1 + (1.65 - Math.max(0, m.fuseTimer)) * 0.24 + Math.sin(this.elapsed * 34) * 0.08;
               m.mesh.scale.setScalar(swell);
               m.mesh.rotation.y = Math.atan2(dxH, dzH);
+              animateMonsterRig(m.mesh, {
+                mode: 'windup',
+                elapsed: this.elapsed,
+                phase: m.patrolPhase,
+                dt,
+              });
               if (m.fuseTimer <= 0) {
                 m.alive = false;
                 m.mesh.visible = false;
@@ -4913,20 +5349,26 @@ export class RpgWorldEngine {
         for (const blk of this.dungeonRig.caveBlocks) {
           if (blk.alive) pushCreeperBox(blk.x, blk.z, blk.halfW);
         }
+        const prevCx = m.x;
+        const prevCz = m.z;
         m.x = THREE.MathUtils.clamp(nextMx, -18, 18);
         m.z = THREE.MathUtils.clamp(nextMz, -18, 18);
-        m.mesh.position.set(m.x, Math.abs(Math.sin(this.elapsed * 5 + m.patrolPhase)) * 0.16, m.z);
+        const cSpd = Math.hypot(m.x - prevCx, m.z - prevCz) / Math.max(0.001, dt);
+        m.walkPhase = (m.walkPhase ?? m.patrolPhase) + dt * (3.2 + cSpd * 1.4);
+        m.mesh.position.set(m.x, Math.abs(Math.sin(m.walkPhase)) * 0.08, m.z);
+        animateMonsterRig(m.mesh, {
+          mode: 'patrol',
+          speed: cSpd,
+          walkPhase: m.walkPhase,
+          elapsed: this.elapsed,
+          phase: m.patrolPhase,
+          dt,
+        });
         continue;
       }
 
       // Special AI 2: Kelelawar Gua (flies near ceiling, flaps wings, swoops down at Hoot!)
       if (m.type === 'kelelawar_gua' && this.worldMode === 'dungeon') {
-        const lw = m.mesh.userData.leftWing as THREE.Object3D | undefined;
-        const rw = m.mesh.userData.rightWing as THREE.Object3D | undefined;
-        const flap = Math.sin(this.elapsed * 16 + m.patrolPhase) * 0.68;
-        if (lw) lw.rotation.z = flap;
-        if (rw) rw.rotation.z = -flap;
-
         const dxH = this.heroPos.x - m.x;
         const dzH = this.heroPos.z - m.z;
         const distH = Math.hypot(dxH, dzH);
@@ -4948,6 +5390,15 @@ export class RpgWorldEngine {
 
         m.y = THREE.MathUtils.lerp(m.y ?? 3.4, targetY, 1 - Math.exp(-5 * dt));
         m.mesh.position.set(m.x, m.y, m.z);
+        animateMonsterRig(m.mesh, {
+          mode: this.phase === 'playing' && distH < 9.5 ? 'attack' : 'patrol',
+          speed: 3.2,
+          walkPhase: this.elapsed * 6,
+          elapsed: this.elapsed,
+          phase: m.patrolPhase,
+          attackProgress: 0.5,
+          dt,
+        });
 
         if (
           this.phase === 'playing' &&
@@ -4984,6 +5435,9 @@ export class RpgWorldEngine {
         if (m.attackCooldown && m.attackCooldown > 0) {
           m.attackCooldown = Math.max(0, m.attackCooldown - dt);
         }
+        if (m.attackAnimTimer && m.attackAnimTimer > 0) {
+          m.attackAnimTimer = Math.max(0, m.attackAnimTimer - dt);
+        }
 
         const ring = m.mesh.userData.combatRing as THREE.Object3D | undefined;
         if (ring) {
@@ -4998,7 +5452,11 @@ export class RpgWorldEngine {
         let nextMx = m.x;
         let nextMz = m.z;
         const baseScale = m.isAmbush ? 1.02 : 1.08;
-        const flashMult = m.hitFlashTimer && m.hitFlashTimer > 0 ? 0.86 : 1.0;
+        m.mesh.scale.setScalar(baseScale);
+        m.mesh.rotation.x = 0;
+
+        let monMode: 'idle' | 'patrol' | 'windup' | 'attack' | 'shoot' | 'hit' = 'patrol';
+        let monAttackProg = 0;
 
         // Phase A: Active Lunging Melee Strike!
         if (m.lungeTimer && m.lungeTimer > 0) {
@@ -5009,8 +5467,8 @@ export class RpgWorldEngine {
             nextMz += (dzH / distH) * spd;
           }
           m.mesh.rotation.y = Math.atan2(dxH, dzH);
-          m.mesh.rotation.x = 0.36;
-          m.mesh.scale.setScalar(baseScale * 1.15 * flashMult);
+          monMode = 'attack';
+          monAttackProg = 1 - m.lungeTimer / 0.28;
 
           const jumpedOver = this.heroPos.y > 1.25;
           let shieldBlocked = false;
@@ -5056,10 +5514,7 @@ export class RpgWorldEngine {
           // Phase B: Telegraphing windup before lunge
           m.windupTimer -= dt;
           m.mesh.rotation.y = Math.atan2(dxH, dzH);
-          m.mesh.rotation.x = -0.26;
-          m.mesh.scale.setScalar(
-            baseScale * (1.14 + Math.sin(this.elapsed * 32) * 0.08) * flashMult,
-          );
+          monMode = 'windup';
           if (m.windupTimer <= 0) {
             m.windupTimer = -1;
             m.lungeTimer = 0.28;
@@ -5067,8 +5522,6 @@ export class RpgWorldEngine {
           }
         } else if (this.phase === 'playing' && m.aggroActive && distH > 0.2) {
           // Phase C: Relentless Chase + Melee/Ranged Decisions
-          m.mesh.rotation.x = 0;
-          m.mesh.scale.setScalar(baseScale * flashMult);
           m.mesh.rotation.y = Math.atan2(dxH, dzH);
 
           if (distH < 2.65 && (m.attackCooldown ?? 0) <= 0) {
@@ -5084,8 +5537,9 @@ export class RpgWorldEngine {
               const pSpeed = this.settings.difficulty === 'pendekar' ? 10.5 : 8.6;
               this.spawnProjectile({
                 fromPlayer: false,
-                x: m.x + (dxH / distH) * 1.1,
-                z: m.z + (dzH / distH) * 1.1,
+                x: m.x + (dxH / distH) * 1.15,
+                y: 1.45,
+                z: m.z + (dzH / distH) * 1.15,
                 vx: (dxH / distH) * pSpeed,
                 vz: (dzH / distH) * pSpeed,
                 damage: 1,
@@ -5094,17 +5548,22 @@ export class RpgWorldEngine {
                 colorHex: 0xef4444,
               });
               m.attackCooldown = this.settings.difficulty === 'pendekar' ? 2.4 : 3.2;
-              m.mesh.rotation.x = 0.22;
+              m.attackAnimTimer = 0.3;
             }
           }
         } else {
           // Idle Patrol
-          m.mesh.rotation.x = 0;
-          m.mesh.scale.setScalar(baseScale * flashMult);
           const p = this.elapsed * 0.9 * baseSpeedMult * calmMult + m.patrolPhase;
           nextMx = m.homeX + Math.cos(p) * 2.5;
           nextMz = m.homeZ + Math.sin(p * 0.85) * 2.1;
           m.mesh.rotation.y = Math.atan2(-Math.sin(p), Math.cos(p * 0.85));
+        }
+
+        if (m.hitFlashTimer && m.hitFlashTimer > 0) {
+          monMode = 'hit';
+        } else if ((m.attackAnimTimer ?? 0) > 0 && monMode === 'patrol') {
+          monMode = 'shoot';
+          monAttackProg = 1 - (m.attackAnimTimer ?? 0) / 0.3;
         }
 
         const mRad = 0.95;
@@ -5126,13 +5585,22 @@ export class RpgWorldEngine {
         for (const blk of this.dungeonRig.caveBlocks) {
           if (blk.alive) pushBrawlerBox(blk.x, blk.z, blk.halfW);
         }
+        const prevBx = m.x;
+        const prevBz = m.z;
         m.x = THREE.MathUtils.clamp(nextMx, -18, 18);
         m.z = THREE.MathUtils.clamp(nextMz, -18, 18);
-        m.mesh.position.set(
-          m.x,
-          Math.abs(Math.sin(this.elapsed * (m.aggroActive ? 7.5 : 4.2) + m.patrolPhase)) * 0.24,
-          m.z,
-        );
+        const bSpd = Math.hypot(m.x - prevBx, m.z - prevBz) / Math.max(0.001, dt);
+        m.walkPhase = (m.walkPhase ?? m.patrolPhase) + dt * (3.5 + bSpd * 1.45);
+        m.mesh.position.set(m.x, Math.abs(Math.sin(m.walkPhase)) * 0.08, m.z);
+        animateMonsterRig(m.mesh, {
+          mode: monMode,
+          speed: bSpd,
+          walkPhase: m.walkPhase,
+          elapsed: this.elapsed,
+          phase: m.patrolPhase,
+          attackProgress: monAttackProg,
+          dt,
+        });
         continue;
       }
 
@@ -5142,9 +5610,9 @@ export class RpgWorldEngine {
       let nextMz = m.homeZ + Math.sin(p * 0.8) * (radius * 0.8);
       if (this.worldMode === 'dungeon' && this.dungeonRig) {
         const mRad = m.isBoss ? 1.25 : 0.95;
-        const pushMonsterBox = (bx: number, bz: number, hw: number) => {
+        const pushMonsterBox = (bx: number, bz: number, hw: number, hd = hw) => {
           const cx = THREE.MathUtils.clamp(nextMx, bx - hw, bx + hw);
-          const cz = THREE.MathUtils.clamp(nextMz, bz - hw, bz + hw);
+          const cz = THREE.MathUtils.clamp(nextMz, bz - hd, bz + hd);
           const dx = nextMx - cx;
           const dz = nextMz - cz;
           const distSq = dx * dx + dz * dz;
@@ -5160,16 +5628,57 @@ export class RpgWorldEngine {
         for (const blk of this.dungeonRig.caveBlocks) {
           if (blk.alive) pushMonsterBox(blk.x, blk.z, blk.halfW);
         }
+      } else if (this.worldMode === 'overworld') {
+        const mRad = 0.95;
+        for (const obs of this.villageRig.obstacles) {
+          const cx = THREE.MathUtils.clamp(nextMx, obs.x - obs.halfW, obs.x + obs.halfW);
+          const cz = THREE.MathUtils.clamp(nextMz, obs.z - obs.halfD, obs.z + obs.halfD);
+          const dx = nextMx - cx;
+          const dz = nextMz - cz;
+          const distSq = dx * dx + dz * dz;
+          if (distSq < mRad * mRad && distSq > 0.0001) {
+            const d = Math.sqrt(distSq);
+            nextMx += (dx / d) * (mRad - d);
+            nextMz += (dz / d) * (mRad - d);
+          }
+        }
       }
+      const prevOx = m.x;
+      const prevOz = m.z;
       m.x = nextMx;
       m.z = nextMz;
-      m.mesh.position.set(m.x, Math.abs(Math.sin(this.elapsed * 4.2 + m.patrolPhase)) * 0.25, m.z);
+      const mSpd = Math.hypot(m.x - prevOx, m.z - prevOz) / Math.max(0.001, dt);
+      m.walkPhase = (m.walkPhase ?? m.patrolPhase) + dt * (3.0 + mSpd * 1.4);
+      m.mesh.position.set(m.x, Math.abs(Math.sin(m.walkPhase)) * 0.06, m.z);
       m.mesh.rotation.y = Math.atan2(-Math.sin(p), Math.cos(p * 0.8));
+      animateMonsterRig(m.mesh, {
+        mode: 'patrol',
+        speed: mSpd,
+        walkPhase: m.walkPhase,
+        elapsed: this.elapsed,
+        phase: m.patrolPhase,
+        dt,
+      });
     }
 
     if (this.worldMode !== 'overworld') return;
 
-    updateMinecraftVillage(this.villageRig, dt, this.elapsed);
+    this.extraVillageColliders.length = 0;
+    this.extraVillageColliders.push({
+      x: this.heroPos.x,
+      z: this.heroPos.z,
+      halfW: 0.65,
+      halfD: 0.65,
+    });
+    for (const npc of this.npcs.values()) {
+      this.extraVillageColliders.push({
+        x: npc.x,
+        z: npc.z,
+        halfW: 0.65,
+        halfD: 0.65,
+      });
+    }
+    updateMinecraftVillage(this.villageRig, dt, this.elapsed, this.extraVillageColliders);
 
     // Gentle blocky Minecraft-style voxel clouds drift across the sky
     const cloudMat = new THREE.Matrix4();
@@ -5204,6 +5713,7 @@ export class RpgWorldEngine {
       });
     }
 
+    let npcIdx = 0;
     for (const [npcId, npc] of this.npcs.entries()) {
       const q = this.quests.find((item) => item.npcId === npcId);
       const showAlert = !q?.claimed;
@@ -5212,6 +5722,9 @@ export class RpgWorldEngine {
         npc.alertMesh.position.y = 4.2 + Math.sin(this.elapsed * 3.5 + npc.x) * 0.28;
         npc.alertMesh.rotation.y += dt * 2.2;
       }
+      const isNear = Math.hypot(this.heroPos.x - npc.x, this.heroPos.z - npc.z) < 4.5;
+      animateZoneNpc(npc.mesh, this.elapsed, npcIdx * 1.15, isNear, dt);
+      npcIdx++;
     }
 
     for (let i = 0; i < this.collectibles.length; i++) {
@@ -5277,6 +5790,32 @@ export class RpgWorldEngine {
     }
 
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+    if (this.hitMarkerTimer > 0) {
+      this.hitMarkerTimer = Math.max(0, this.hitMarkerTimer - dt);
+      if (this.hitMarkerTimer === 0) this.hitMarkerKind = 'none';
+    }
+    this.recoilPitch = THREE.MathUtils.damp(this.recoilPitch, 0, 11, dt);
+    this.crosshairSpread = THREE.MathUtils.damp(this.crosshairSpread, 0, 9, dt);
+
+    const hasEquippedWeapon =
+      this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon);
+    if (!hasEquippedWeapon && this.isAiming) {
+      this.isAiming = false;
+      this.aimToggled = false;
+    }
+    const wantAds =
+      this.isAiming &&
+      hasEquippedWeapon &&
+      (this.cameraMode === 'third_back' || this.cameraMode === 'first_person');
+    this.aimBlend = THREE.MathUtils.damp(this.aimBlend, wantAds ? 1 : 0, 14, dt);
+
+    const continuousHold =
+      this.hudFireHeld ||
+      this.leftFireHeld ||
+      this.heldKeys.has('Space');
+    if (continuousHold && this.fireCooldown <= 0 && hasEquippedWeapon) {
+      this.fireActiveWeapon(true);
+    }
 
     // 1. Movement (Keyboard + Virtual Analog Joystick + Tap-to-Move)
     let mx = this.virtualMove.x;
@@ -5299,11 +5838,16 @@ export class RpgWorldEngine {
         _right.set(Math.cos(this.cameraYaw), 0, -Math.sin(this.cameraYaw));
       }
 
-      const sprint = this.heldKeys.has('ShiftLeft') || this.heldKeys.has('ShiftRight') ? 1.35 : 1.0;
+      const sprint =
+        (this.heldKeys.has('ShiftLeft') || this.heldKeys.has('ShiftRight')) && !wantAds
+          ? 1.35
+          : wantAds
+          ? 0.78
+          : 1.0;
       _v3.set(0, 0, 0).addScaledVector(_forward, mz).addScaledVector(_right, mx);
       if (_v3.lengthSq() > 1) _v3.normalize();
       this.heroVel.addScaledVector(_v3, 76 * sprint * dt);
-      if (this.cameraMode !== 'first_person') {
+      if (this.cameraMode !== 'first_person' && !wantAds && this.shootAimTimer <= 0) {
         const targetYaw = Math.atan2(_v3.x, _v3.z);
         let diff = targetYaw - this.heroYaw;
         while (diff > Math.PI) diff -= Math.PI * 2;
@@ -5319,14 +5863,21 @@ export class RpgWorldEngine {
       } else {
         _v3.set(dx / dist, 0, dz / dist);
         this.heroVel.addScaledVector(_v3, 72 * dt);
-        if (this.cameraMode !== 'first_person') {
+        if (this.cameraMode !== 'first_person' && !wantAds && this.shootAimTimer <= 0) {
           this.heroYaw = Math.atan2(_v3.x, _v3.z);
         }
       }
     }
 
-    if (this.cameraMode === 'first_person') {
-      this.heroYaw = this.cameraYaw + Math.PI;
+    if (
+      this.cameraMode === 'first_person' ||
+      (this.cameraMode === 'third_back' && (wantAds || this.shootAimTimer > 0))
+    ) {
+      const targetAimYaw = this.cameraYaw + Math.PI;
+      let diff = targetAimYaw - this.heroYaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.heroYaw += diff * (1 - Math.exp(-22 * dt));
     }
 
     this.heroVel.multiplyScalar(Math.exp(-7.5 * dt));
@@ -5370,6 +5921,18 @@ export class RpgWorldEngine {
           }
         }
       }
+      // Also prevent Hero from walking straight through Quest NPCs
+      for (const npc of this.npcs.values()) {
+        const dx = this.heroPos.x - npc.x;
+        const dz = this.heroPos.z - npc.z;
+        const minD = 1.05;
+        const dSq = dx * dx + dz * dz;
+        if (dSq < minD * minD && dSq > 0.0001) {
+          const d = Math.sqrt(dSq);
+          this.heroPos.x += (dx / d) * (minD - d);
+          this.heroPos.z += (dz / d) * (minD - d);
+        }
+      }
       if (this.heroPos.y <= 0) {
         this.heroPos.y = 0;
         this.heroVelY = 0;
@@ -5379,28 +5942,38 @@ export class RpgWorldEngine {
       }
     }
 
+    if (this.shootAimTimer > 0) {
+      this.shootAimTimer = Math.max(0, this.shootAimTimer - dt);
+    }
+    if (this.shootRecoilTimer > 0) {
+      this.shootRecoilTimer = Math.max(0, this.shootRecoilTimer - dt);
+    }
+
     const speed = Math.hypot(this.heroVel.x, this.heroVel.z);
+    if (speed > 0.6) {
+      this.walkCycle += dt * (8 + speed * 0.45);
+    }
+
     this.hero.root.position.copy(this.heroPos);
     this.hero.body.rotation.y = this.heroYaw;
     if (this.worldMode === 'dungeon') {
       this.playerCaveLight.position.set(this.heroPos.x, this.heroPos.y + 2.8, this.heroPos.z);
     }
 
-    if (speed > 0.6) {
-      this.walkCycle += dt * (8 + speed * 0.45);
-      const swing = Math.sin(this.walkCycle) * 0.6;
-      this.hero.leftLeg.rotation.x = swing;
-      this.hero.rightLeg.rotation.x = -swing;
-      this.hero.leftArm.rotation.x = -swing * 0.7;
-      this.hero.rightArm.rotation.x = swing * 0.5;
-      this.hero.body.position.y = Math.abs(Math.sin(this.walkCycle)) * 0.12;
-    } else {
-      this.hero.leftLeg.rotation.x *= 0.85;
-      this.hero.rightLeg.rotation.x *= 0.85;
-      this.hero.leftArm.rotation.x *= 0.85;
-      this.hero.rightArm.rotation.x *= 0.85;
-      this.hero.body.position.y = 0;
-    }
+    const fireAimAlpha = this.shootAimTimer > 0 ? Math.min(1, this.shootAimTimer * 3.5) : 0;
+    const aimAlpha = Math.max(fireAimAlpha, this.aimBlend);
+    const recoil =
+      this.shootRecoilTimer > 0 ? Math.sin((this.shootRecoilTimer / 0.22) * Math.PI) : 0;
+
+    applyHeroWeaponPose(this.hero, this.activeWeapon, hasEquippedWeapon, {
+      speed,
+      walkCycle: this.walkCycle,
+      aimAlpha,
+      recoil,
+      dt,
+      elapsed: this.elapsed,
+      aimPitch: -(this.cameraPitch - this.recoilPitch),
+    });
 
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     if (this.pulseRingTimer > 0) {
@@ -5416,45 +5989,92 @@ export class RpgWorldEngine {
       this.fpSwingTimer = Math.max(0, this.fpSwingTimer - dt);
     }
 
-    // Update Camera Rig (GTA 360 Orbital Spring-Arm / FPS / Free Orbit)
+    // Update Camera Rig (PUBG Over-the-Shoulder TPS + ADS Scope Zoom / FPS / Free Orbit)
     const sinY = Math.sin(this.cameraYaw);
     const cosY = Math.cos(this.cameraYaw);
-    const cosP = Math.cos(this.cameraPitch);
-    const sinP = Math.sin(this.cameraPitch);
+    const effPitch = THREE.MathUtils.clamp(
+      this.cameraPitch - this.recoilPitch,
+      this.cameraMode === 'first_person' ? -1.12 : -0.58,
+      1.12,
+    );
+    const cosP = Math.cos(effPitch);
+    const sinP = Math.sin(effPitch);
     const targetY = this.heroPos.y + 1.92;
+
+    const targetFov =
+      this.cameraMode === 'first_person'
+        ? THREE.MathUtils.lerp(58, 40, this.aimBlend)
+        : this.cameraMode === 'third_back'
+        ? THREE.MathUtils.lerp(58, 43, this.aimBlend)
+        : 58;
+    if (Math.abs(this.camera.fov - targetFov) > 0.06) {
+      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 14, dt);
+      this.camera.updateProjectionMatrix();
+    }
 
     if (this.cameraMode === 'third_back' || this.cameraMode === 'third_front') {
       const sign = this.cameraMode === 'third_front' ? -1 : 1;
-      const desiredDist =
+      const baseDist =
         this.worldMode === 'dungeon' ? Math.min(this.thirdPersonDist, 6.2) : this.thirdPersonDist;
+      const desiredDist =
+        this.cameraMode === 'third_back'
+          ? THREE.MathUtils.lerp(baseDist, Math.min(baseDist, 3.45), this.aimBlend)
+          : baseDist;
+
+      // Offset camera to Hero's right shoulder in TPS so center crosshair is unobstructed!
+      const shoulderRight =
+        this.cameraMode === 'third_back' ? THREE.MathUtils.lerp(0.86, 1.06, this.aimBlend) : 0;
+      const pivotX = this.heroPos.x + cosY * shoulderRight;
+      const pivotY =
+        this.cameraMode === 'third_back'
+          ? this.heroPos.y + THREE.MathUtils.lerp(2.04, 2.22, this.aimBlend)
+          : targetY;
+      const pivotZ = this.heroPos.z - sinY * shoulderRight;
+
       const dirX = sign * sinY * cosP;
       const dirY = sinP;
       const dirZ = sign * cosY * cosP;
 
+      // Trace spring-arm from Hero center toward desired shoulder-offset camera position
+      const goalX = pivotX + dirX * desiredDist;
+      const goalY = Math.max(0.75, pivotY + dirY * desiredDist);
+      const goalZ = pivotZ + dirZ * desiredDist;
+      const rx = goalX - this.heroPos.x;
+      const ry = goalY - pivotY;
+      const rz = goalZ - this.heroPos.z;
+      const rayLen = Math.hypot(rx, ry, rz) || 1;
       const blockedDist = this.computeSpringArmDist(
         this.heroPos.x,
-        targetY,
+        pivotY,
         this.heroPos.z,
-        dirX,
-        dirY,
-        dirZ,
-        desiredDist,
+        rx / rayLen,
+        ry / rayLen,
+        rz / rayLen,
+        rayLen,
       );
 
       // Snap inward ultra-fast when hitting a wall/pillar; ease outward smoothly when clear
       const distAlpha =
         blockedDist < this.currentCamDist
           ? 1 - Math.exp(-32 * dt)
-          : 1 - Math.exp(-7.5 * dt);
+          : 1 - Math.exp(-9.5 * dt);
       this.currentCamDist += (blockedDist - this.currentCamDist) * distAlpha;
 
-      const camX = this.heroPos.x + dirX * this.currentCamDist;
-      const camY = Math.max(0.75, targetY + dirY * this.currentCamDist);
-      const camZ = this.heroPos.z + dirZ * this.currentCamDist;
+      const camX = this.heroPos.x + (rx / rayLen) * this.currentCamDist;
+      const camY = Math.max(0.75, pivotY + (ry / rayLen) * this.currentCamDist);
+      const camZ = this.heroPos.z + (rz / rayLen) * this.currentCamDist;
 
       _v1.set(camX, camY, camZ);
-      this.camera.position.lerp(_v1, 1 - Math.exp(-24 * dt));
-      this.camera.lookAt(this.heroPos.x, targetY, this.heroPos.z);
+      this.camera.position.lerp(_v1, 1 - Math.exp(-28 * dt));
+      if (this.cameraMode === 'third_back') {
+        this.camera.lookAt(
+          pivotX - dirX * 24,
+          pivotY - dirY * 24,
+          pivotZ - dirZ * 24,
+        );
+      } else {
+        this.camera.lookAt(this.heroPos.x, targetY, this.heroPos.z);
+      }
     } else if (this.cameraMode === 'first_person') {
       const eyeY = this.heroPos.y + 2.55;
       this.camera.position.set(this.heroPos.x, eyeY, this.heroPos.z);
@@ -5466,13 +6086,13 @@ export class RpgWorldEngine {
       const walkBob = speed > 0.6 ? Math.sin(this.walkCycle) : 0;
       const swing = this.fpSwingTimer > 0 ? Math.sin((1 - this.fpSwingTimer / 0.24) * Math.PI) : 0;
       this.fpViewRig.handPivot.position.set(
-        0.42 + walkBob * 0.024,
-        -0.36 + Math.abs(walkBob) * 0.028 - swing * 0.06,
-        -0.68 - swing * 0.14,
+        THREE.MathUtils.lerp(0.42, 0.22, this.aimBlend) + walkBob * 0.02,
+        THREE.MathUtils.lerp(-0.36, -0.28, this.aimBlend) + Math.abs(walkBob) * 0.024 - swing * 0.06,
+        THREE.MathUtils.lerp(-0.68, -0.58, this.aimBlend) - swing * 0.14,
       );
       this.fpViewRig.handPivot.rotation.set(
         0.28 - swing * 0.62,
-        -0.34 + swing * 0.2,
+        THREE.MathUtils.lerp(-0.34, -0.1, this.aimBlend) + swing * 0.2,
         0.14 + walkBob * 0.05,
       );
     } else {
@@ -5481,6 +6101,11 @@ export class RpgWorldEngine {
       this.controls.target.add(_v2);
       this.camera.position.add(_v2);
     }
+
+    this.crosshairOnEnemy =
+      (this.cameraMode === 'third_back' || this.cameraMode === 'first_person') && hasEquippedWeapon
+        ? this.getCrosshairAimInfo().hitEnemy
+        : false;
 
     if (this.encounterGraceTimer > 0) {
       this.encounterGraceTimer = Math.max(0, this.encounterGraceTimer - dt);
@@ -6175,25 +6800,84 @@ export class RpgWorldEngine {
           s.hp = 3;
           s.x = s.homeX;
           s.z = s.homeZ;
+          s.prevX = s.homeX;
+          s.prevZ = s.homeZ;
+          s.recoilTimer = 0;
+          s.hitSquashTimer = 0;
           s.mesh.visible = true;
         }
         continue;
       }
+
+      s.recoilTimer = Math.max(0, s.recoilTimer - dt);
+      s.hitSquashTimer = Math.max(0, s.hitSquashTimer - dt);
+
       const p = this.elapsed * 0.9 + s.phase;
-      s.x = s.homeX + Math.cos(p) * 3.5;
-      s.z = s.homeZ + Math.sin(p) * 2.5;
+      let nextSx = s.homeX + Math.cos(p) * 3.5;
+      let nextSz = s.homeZ + Math.sin(p) * 2.5;
+      const sRad = 0.88;
+      const pushShooterBox = (bx: number, bz: number, hw: number, hd = hw) => {
+        const cx = THREE.MathUtils.clamp(nextSx, bx - hw, bx + hw);
+        const cz = THREE.MathUtils.clamp(nextSz, bz - hd, bz + hd);
+        const dx = nextSx - cx;
+        const dz = nextSz - cz;
+        const distSq = dx * dx + dz * dz;
+        if (distSq < sRad * sRad && distSq > 0.0001) {
+          const d = Math.sqrt(distSq);
+          nextSx += (dx / d) * (sRad - d);
+          nextSz += (dz / d) * (sRad - d);
+        }
+      };
+
+      if (this.worldMode === 'overworld') {
+        for (const obs of this.villageRig.obstacles) {
+          pushShooterBox(obs.x, obs.z, obs.halfW, obs.halfD);
+        }
+        for (const npc of this.npcs.values()) {
+          pushShooterBox(npc.x, npc.z, 0.7);
+        }
+        nextSx = THREE.MathUtils.clamp(nextSx, -38, 38);
+        nextSz = THREE.MathUtils.clamp(nextSz, -36, 38);
+      } else if (this.worldMode === 'dungeon' && this.dungeonRig) {
+        for (const col of this.dungeonRig.caveColliders) {
+          pushShooterBox(col.x, col.z, col.halfW);
+        }
+        for (const blk of this.dungeonRig.caveBlocks) {
+          if (blk.alive) pushShooterBox(blk.x, blk.z, blk.halfW);
+        }
+        nextSx = THREE.MathUtils.clamp(nextSx, -18, 18);
+        nextSz = THREE.MathUtils.clamp(nextSz, -18, 18);
+      }
+
+      const sSpeed = Math.hypot(nextSx - s.prevX, nextSz - s.prevZ) / Math.max(0.001, dt);
+      s.x = nextSx;
+      s.z = nextSz;
+      s.prevX = nextSx;
+      s.prevZ = nextSz;
+      s.walkPhase += dt * (4.2 + sSpeed * 1.4);
+
       s.mesh.position.set(s.x, 0, s.z);
       const lookYaw = Math.atan2(this.heroPos.x - s.x, this.heroPos.z - s.z);
       s.mesh.rotation.y = lookYaw;
 
       s.cooldown -= dt;
       const distToHero = Math.hypot(this.heroPos.x - s.x, this.heroPos.z - s.z);
+      const aimAlpha =
+        distToHero < 26 && s.cooldown < 0.75
+          ? THREE.MathUtils.clamp(1 - s.cooldown / 0.75, 0.25, 1)
+          : 0.22;
+
       if (s.cooldown <= 0 && distToHero < 26) {
         s.cooldown = diff.shooterCooldown;
+        s.recoilTimer = 0.28;
+        const muzzleX = s.x + Math.sin(lookYaw) * 1.15;
+        const muzzleZ = s.z + Math.cos(lookYaw) * 1.15;
+        this.spawnBurst(muzzleX, 1.48, muzzleZ, 0xf43f5e, 6);
         this.spawnProjectile({
           fromPlayer: false,
-          x: s.x + Math.sin(lookYaw) * 1.1,
-          z: s.z + Math.cos(lookYaw) * 1.1,
+          x: muzzleX,
+          y: 1.48,
+          z: muzzleZ,
           vx: Math.sin(lookYaw) * diff.shooterBulletSpeed,
           vz: Math.cos(lookYaw) * diff.shooterBulletSpeed,
           damage: 1,
@@ -6202,6 +6886,17 @@ export class RpgWorldEngine {
           colorHex: 0xf43f5e,
         });
       }
+
+      animateShooterRig(s.mesh, {
+        speed: sSpeed,
+        walkPhase: s.walkPhase,
+        aimAlpha,
+        recoil: s.recoilTimer > 0 ? Math.sin((s.recoilTimer / 0.28) * Math.PI) : 0,
+        hitSquash: s.hitSquashTimer > 0 ? s.hitSquashTimer / 0.24 : 0,
+        elapsed: this.elapsed,
+        phase: s.phase,
+        dt,
+      });
     }
 
     for (const p of this.projectiles) {
@@ -6213,8 +6908,15 @@ export class RpgWorldEngine {
         continue;
       }
       p.x += p.vx * dt;
+      p.y = (p.y ?? 1.35) + p.vy * dt;
       p.z += p.vz * dt;
-      p.mesh.position.set(p.x, 1.35, p.z);
+      if (p.y < 0.06) {
+        p.active = false;
+        p.mesh.visible = false;
+        this.spawnBurst(p.x, 0.12, p.z, 0x94a3b8, 5);
+        continue;
+      }
+      p.mesh.position.set(p.x, p.y, p.z);
       p.mesh.rotation.y += dt * 8;
 
       if (this.worldMode === 'dungeon' && this.dungeonRig) {
@@ -6231,7 +6933,11 @@ export class RpgWorldEngine {
             if (!blk.alive) continue;
             // Player shots pass over/through their own placed shield blocks!
             if (p.fromPlayer && blk.kind === 'player_shield') continue;
-            if (Math.abs(p.x - blk.x) < blk.halfW + 0.25 && Math.abs(p.z - blk.z) < blk.halfW + 0.25) {
+            if (
+              Math.abs(p.x - blk.x) < blk.halfW + 0.25 &&
+              Math.abs(p.z - blk.z) < blk.halfW + 0.25 &&
+              Math.abs(p.y - blk.y) < 1.35
+            ) {
               hitWall = true;
               if (!p.fromPlayer && blk.kind === 'player_shield') {
                 hitColor = 0x38bdf8;
@@ -6255,7 +6961,7 @@ export class RpgWorldEngine {
         if (hitWall) {
           p.active = false;
           p.mesh.visible = false;
-          this.spawnBurst(p.x, 1.3, p.z, hitColor, 6);
+          this.spawnBurst(p.x, p.y, p.z, hitColor, 6);
           continue;
         }
       }
@@ -6265,13 +6971,15 @@ export class RpgWorldEngine {
         let consumed = false;
         for (const s of this.shooters) {
           if (!s.alive || p.hitIds.has(s.id)) continue;
-          if (Math.hypot(p.x - s.x, p.z - s.z) < 1.6) {
+          if (Math.hypot(p.x - s.x, p.z - s.z) < 1.6 && Math.abs(p.y - 1.35) < 1.75) {
             p.hitIds.add(s.id);
             s.hp -= p.damage;
+            s.hitSquashTimer = 0.24;
             s.x += (p.vx / Math.max(1, Math.hypot(p.vx, p.vz))) * 1.8;
             s.z += (p.vz / Math.max(1, Math.hypot(p.vx, p.vz))) * 1.8;
             soundEngine.playHit();
             this.spawnBurst(s.x, 1.4, s.z, 0xf43f5e, 10);
+            this.triggerHitMarker(s.hp <= 0);
 
             if (s.hp <= 0) {
               s.alive = false;
@@ -6314,7 +7022,10 @@ export class RpgWorldEngine {
         for (const m of this.getActiveMonsters()) {
           if (!m.alive || m.angryTimer > 0) continue;
           const hitRadius = m.isCaveMob || m.combatOnly ? 2.15 : 1.9;
-          if (Math.hypot(p.x - m.x, p.z - m.z) < hitRadius) {
+          const targetCenterY =
+            (m.y ?? (m.type === 'kelelawar_gua' ? 3.4 : 0)) + (m.isBoss ? 1.8 : 1.15);
+          const halfH = m.isBoss ? 2.4 : m.type === 'kelelawar_gua' ? 1.55 : 1.75;
+          if (Math.hypot(p.x - m.x, p.z - m.z) < hitRadius && Math.abs(p.y - targetCenterY) < halfH) {
             p.active = false;
             p.mesh.visible = false;
 
@@ -6327,6 +7038,7 @@ export class RpgWorldEngine {
             const nextStance = Math.max(0, curStance - p.shieldDamage);
             m.stanceHp = nextStance;
             soundEngine.playHit();
+            this.triggerHitMarker(nextStance <= 0);
 
             if (nextStance > 0) {
               const spd = Math.max(1, Math.hypot(p.vx, p.vz));
@@ -6829,6 +7541,14 @@ export class RpgWorldEngine {
               maxHp: this.targetedCaveBlock.maxHp,
             }
           : null,
+      isAiming: this.isAiming,
+      hitMarkerKind: this.hitMarkerTimer > 0 ? this.hitMarkerKind : 'none',
+      crosshairOnEnemy: this.crosshairOnEnemy,
+      crosshairSpread: Math.min(
+        1,
+        this.crosshairSpread + (Math.hypot(this.heroVel.x, this.heroVel.z) > 1.2 ? 0.24 : 0),
+      ),
+      pointerLocked: this.pointerLocked,
     });
   }
 
@@ -6840,12 +7560,14 @@ export class RpgWorldEngine {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onWindowBlur);
+    document.removeEventListener('pointerlockchange', this.onPointerLockChange);
     const dom = this.renderer.domElement;
     dom.removeEventListener('pointerdown', this.onPointerDown);
     dom.removeEventListener('pointermove', this.onPointerMove);
     dom.removeEventListener('pointerup', this.onPointerUp);
     dom.removeEventListener('pointercancel', this.onPointerCancel);
     dom.removeEventListener('wheel', this.onWheel);
+    dom.removeEventListener('contextmenu', this.onContextMenu);
 
     this.controls.dispose();
     this.villageRig?.disposables.forEach((d) => d.dispose());
