@@ -2412,10 +2412,10 @@ export class RpgWorldEngine {
       this.controls.update();
     }
     const labels: Record<CameraMode, string> = {
-      third_back: 'Kamera: 3D GTA (Orbit 360° Anti-Tembok)',
-      first_person: 'Kamera: Orang Pertama (FPS)',
-      third_front: 'Kamera: Orang Ketiga (Depan)',
-      orbit: 'Kamera: Bebas / Foto 3D',
+      third_back: 'Sudut Pandang: Kamera Belakang (Orbit 360°)',
+      first_person: 'Sudut Pandang: Orang Pertama (FPS)',
+      third_front: 'Sudut Pandang: Kamera Depan',
+      orbit: 'Sudut Pandang: Kamera Bebas 3D',
     };
     this.showBanner(labels[this.cameraMode], 2.2);
     this.pushHud(true);

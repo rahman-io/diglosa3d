@@ -1,23 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Backpack,
-  BookOpen,
-  Camera,
-  Crown,
-  Gem,
-  Heart,
-  HelpCircle,
   Lock,
-  Map as MapIcon,
-  Maximize2,
-  Menu,
-  Minimize2,
-  Pause,
-  ScrollText,
-  Settings,
-  Trophy,
-  Volume2,
-  VolumeX,
   X,
 } from 'lucide-react';
 import {
@@ -31,11 +14,11 @@ import { CameraMode, RpgHudSnapshot } from '../types/game';
 import { isFullscreenActive, toggleAppFullscreen } from '../utils/fullscreen';
 import { RadarMinimap, StarterWeaponPixelIcon } from './RadarMinimap';
 
-const CAMERA_SHORT_LABELS: Record<CameraMode, string> = {
-  third_back: '3D GTA',
-  first_person: 'FPS',
-  third_front: 'Depan',
-  orbit: 'Bebas',
+const CAMERA_VIEW_LABELS: Record<CameraMode, string> = {
+  third_back: 'Kamera Belakang',
+  first_person: 'Sudut Orang Pertama (FPS)',
+  third_front: 'Kamera Depan',
+  orbit: 'Kamera Bebas',
 };
 
 interface RpgHudProps {
@@ -195,7 +178,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
   const updateJoystickFromPointer = (clientX: number, clientY: number) => {
     const origin = stickOriginRef.current;
     if (!origin) return;
-    const maxR = 46;
+    const maxR = 36;
     let dx = clientX - origin.x;
     let dy = clientY - origin.y;
     const dist = Math.hypot(dx, dy);
@@ -216,14 +199,14 @@ export const RpgHud: React.FC<RpgHudProps> = ({
   };
 
   const drawerItems = [
-    { label: 'Tas', icon: Backpack, onClick: onOpenBag, badge: hud.ownedWeapons.length },
-    { label: 'Kamus', icon: BookOpen, onClick: onOpenKamus, badge: hud.wordsMastered },
-    { label: 'Misi', icon: ScrollText, onClick: onOpenQuests, badge: activeQuestCount },
-    { label: 'Peta', icon: MapIcon, onClick: onOpenMap },
-    { label: 'Petunjuk', icon: HelpCircle, onClick: onOpenGuide },
-    { label: 'Opsi', icon: Settings, onClick: onOpenOptions },
-    { label: 'Ranking', icon: Trophy, onClick: onOpenLeaderboard },
-    { label: 'Jeda', icon: Pause, onClick: onPause },
+    { label: 'Tas', iconSrc: './assets/ui/icon_bag.png', onClick: onOpenBag, badge: hud.ownedWeapons.length },
+    { label: 'Kamus', iconSrc: './assets/ui/icon_kamus.png', onClick: onOpenKamus, badge: hud.wordsMastered },
+    { label: 'Misi', iconSrc: './assets/ui/icon_quest.png', onClick: onOpenQuests, badge: activeQuestCount },
+    { label: 'Peta', iconSrc: './assets/ui/icon_map.png', onClick: onOpenMap },
+    { label: 'Petunjuk', iconSrc: './assets/ui/menu_guide.png', onClick: onOpenGuide },
+    { label: 'Opsi', iconSrc: './assets/ui/icon_settings.png', onClick: onOpenOptions },
+    { label: 'Ranking', iconSrc: './assets/ui/menu_trophy.png', onClick: onOpenLeaderboard },
+    { label: 'Jeda', iconSrc: './assets/ui/btn_pause.png', onClick: onPause },
   ];
 
   return (
@@ -310,13 +293,18 @@ export const RpgHud: React.FC<RpgHudProps> = ({
         </div>
       )}
 
-      {/* TOP-RIGHT: GTA-Style Minimalist HP / Stats + Weapon Square + Utility/Menu Bar */}
+      {/* TOP-RIGHT: RPG Minimalist HP / Stats + Weapon Square + Utility Medallion Bar */}
       <div className="pointer-events-auto fixed right-2.5 top-2.5 z-20 flex flex-col items-end gap-1.5 sm:right-4 sm:top-4">
         <div className="flex items-center gap-2">
-          {/* Sleek GTA Health & Compact Stats Pill */}
-          <div className="flex flex-col items-end rounded-xl border border-white/15 bg-slate-950/55 px-2.5 py-1.5 text-white shadow-lg backdrop-blur-[2px]">
+          {/* Sleek RPG Health & Compact Stats Pill */}
+          <div className="flex flex-col items-end rounded-xl border border-amber-300/25 bg-slate-950/60 px-2.5 py-1.5 text-white shadow-lg backdrop-blur-[2px]">
             <div className="flex items-center gap-1.5">
-              <Heart className="h-3 w-3 fill-rose-500 text-rose-400" />
+              <img
+                src="./assets/ui/icon_heart.png"
+                alt="Nyawa"
+                className="h-4 w-4 shrink-0 object-contain drop-shadow"
+                draggable={false}
+              />
               <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-900/90 ring-1 ring-white/15 sm:w-24">
                 <div
                   className="h-full bg-gradient-to-r from-rose-600 to-rose-400 transition-all duration-200"
@@ -329,18 +317,28 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             </div>
             <div className="mt-1 flex items-center gap-2.5 font-mono-nums text-[10px] font-bold">
               <span className="text-amber-300">Lv.{String(hud.level).padStart(2, '0')}</span>
-              <span className="flex items-center gap-0.5 text-cyan-300">
-                <Gem className="h-3 w-3 fill-cyan-400" />
+              <span className="flex items-center gap-1 text-cyan-300">
+                <img
+                  src="./assets/ui/icon_diamond.png"
+                  alt="Berlian"
+                  className="h-3.5 w-3.5 shrink-0 object-contain drop-shadow"
+                  draggable={false}
+                />
                 {hud.diamonds}
               </span>
-              <span className="flex items-center gap-0.5 text-amber-300">
-                <Crown className="h-3 w-3 fill-amber-400" />
+              <span className="flex items-center gap-1 text-amber-300">
+                <img
+                  src="./assets/ui/icon_crown.png"
+                  alt="Mahkota"
+                  className="h-3.5 w-3.5 shrink-0 object-contain drop-shadow"
+                  draggable={false}
+                />
                 {hud.crowns}/6
               </span>
             </div>
           </div>
 
-          {/* GTA/MOBA Active Weapon & Tool Box (tap to open Tas) */}
+          {/* Active Weapon & Tool Box (tap to open Tas) */}
           <button
             type="button"
             onClick={onOpenBag}
@@ -367,16 +365,21 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           </button>
         </div>
 
-        {/* Top-Right Utility Row: Camera + Fullscreen + Mute + Menu Drawer */}
-        <div className="flex items-center gap-1.5">
+        {/* Top-Right Utility Medallion Row (Icon-Only: Camera Eye View, Fullscreen, Mute, Menu) */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={onToggleCamera}
-            title={`Ganti Kamera: ${CAMERA_SHORT_LABELS[hud.cameraMode]} (C / F5)`}
-            className="flex h-8 items-center gap-1 rounded-full border border-white/20 bg-slate-950/55 px-2.5 text-[10px] font-extrabold text-cyan-200 shadow backdrop-blur-[2px] hover:bg-slate-900/80"
+            title={`Ganti Sudut Pandang: ${CAMERA_VIEW_LABELS[hud.cameraMode]} (C / F5)`}
+            aria-label={`Ganti Sudut Pandang: ${CAMERA_VIEW_LABELS[hud.cameraMode]}`}
+            className="relative flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10"
           >
-            <Camera className="h-3.5 w-3.5 text-cyan-300" />
-            <span>{CAMERA_SHORT_LABELS[hud.cameraMode]}</span>
+            <img
+              src="./assets/ui/btn_view.png"
+              alt="Ganti Sudut Pandang Kamera"
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_3px_8px_rgba(34,211,238,0.45)]"
+              draggable={false}
+            />
           </button>
 
           <button
@@ -385,22 +388,31 @@ export const RpgHud: React.FC<RpgHudProps> = ({
             onClick={() => void toggleAppFullscreen()}
             title={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             aria-label={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-slate-950/55 text-cyan-200 shadow backdrop-blur-[2px] hover:bg-slate-900/80"
+            className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10 ${
+              isFs ? 'ring-2 ring-cyan-300/75' : ''
+            }`}
           >
-            {isFs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            <img
+              src="./assets/ui/btn_fullscreen.png"
+              alt={isFs ? 'Keluar Layar Penuh' : 'Layar Penuh'}
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_3px_8px_rgba(34,211,238,0.4)]"
+              draggable={false}
+            />
           </button>
 
           <button
             type="button"
             onClick={onToggleMute}
             title={muted ? 'Nyalakan Suara' : 'Matikan Suara'}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-slate-950/55 text-amber-200 shadow backdrop-blur-[2px] hover:bg-slate-900/80"
+            aria-label={muted ? 'Nyalakan Suara' : 'Matikan Suara'}
+            className="relative flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10"
           >
-            {muted ? (
-              <VolumeX className="h-3.5 w-3.5 text-rose-400" />
-            ) : (
-              <Volume2 className="h-3.5 w-3.5" />
-            )}
+            <img
+              src={muted ? './assets/ui/btn_sound_off.png' : './assets/ui/btn_sound_on.png'}
+              alt={muted ? 'Suara Mati' : 'Suara Nyala'}
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.45)]"
+              draggable={false}
+            />
           </button>
 
           <button
@@ -410,43 +422,58 @@ export const RpgHud: React.FC<RpgHudProps> = ({
               setMenuOpen((v) => !v);
             }}
             title="Menu (Tas, Kamus, Misi, Peta, Opsi)"
-            className="relative flex h-8 items-center gap-1 rounded-full border border-amber-300/45 bg-slate-950/65 px-2.5 text-[10px] font-extrabold text-amber-200 shadow backdrop-blur-[2px] hover:bg-slate-900/85"
+            aria-label="Menu"
+            className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10 ${
+              menuOpen ? 'scale-105 ring-2 ring-amber-300' : ''
+            }`}
           >
-            {menuOpen ? <X className="h-3.5 w-3.5" /> : <Menu className="h-3.5 w-3.5" />}
-            <span>Menu</span>
-            {activeQuestCount > 0 && !menuOpen && (
-              <span className="flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-rose-600 px-1 font-mono-nums text-[8px] font-black text-white">
-                {activeQuestCount}
+            <img
+              src="./assets/ui/btn_menu.png"
+              alt="Menu"
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_3px_8px_rgba(245,158,11,0.45)]"
+              draggable={false}
+            />
+            {menuOpen ? (
+              <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-amber-200 bg-slate-950/95 text-amber-200 shadow">
+                <X className="h-2.5 w-2.5" />
               </span>
+            ) : (
+              activeQuestCount > 0 && (
+                <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-slate-950 bg-rose-600 px-1 font-mono-nums text-[9px] font-black text-white shadow">
+                  {activeQuestCount}
+                </span>
+              )
             )}
           </button>
         </div>
 
-        {/* Collapsible Menu Drawer (Tas, Kamus, Misi, Peta, Opsi, Ranking) */}
+        {/* Collapsible Menu Drawer (Tas, Kamus, Misi, Peta, Petunjuk, Opsi, Ranking, Jeda) */}
         {menuOpen && (
-          <div className="mt-1 grid w-52 grid-cols-2 gap-1.5 rounded-2xl border border-white/20 bg-slate-950/85 p-2 shadow-2xl backdrop-blur-md">
-            {drawerItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    item.onClick();
-                  }}
-                  className="relative flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 text-left text-[11px] font-bold text-slate-100 transition hover:bg-white/15"
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-amber-300" />
-                  <span className="truncate">{item.label}</span>
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className="ml-auto rounded-full bg-rose-600 px-1.5 py-0.2 font-mono-nums text-[9px] font-black text-white">
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <div className="mt-1 grid w-56 grid-cols-2 gap-1.5 rounded-2xl border-2 border-amber-300/35 bg-slate-950/88 p-2 shadow-2xl backdrop-blur-md">
+            {drawerItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  item.onClick();
+                }}
+                className="relative flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 text-left text-[11px] font-bold text-slate-100 transition hover:border-amber-300/35 hover:bg-white/15"
+              >
+                <img
+                  src={item.iconSrc}
+                  alt={item.label}
+                  className="h-5 w-5 shrink-0 object-contain drop-shadow"
+                  draggable={false}
+                />
+                <span className="truncate">{item.label}</span>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="ml-auto rounded-full bg-rose-600 px-1.5 py-0.2 font-mono-nums text-[9px] font-black text-white">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -519,7 +546,7 @@ export const RpgHud: React.FC<RpgHudProps> = ({
               }
             }}
             className="pointer-events-auto fixed bottom-12 left-0 top-28 z-10 w-[44vw] touch-none sm:bottom-16 sm:top-32 sm:w-[40vw]"
-            aria-label="Area Floating Joystick GTA"
+            aria-label="Area Floating Joystick"
           />
 
           {floatingOrigin && (
@@ -530,12 +557,20 @@ export const RpgHud: React.FC<RpgHudProps> = ({
                 top: floatingOrigin.y,
                 transform: 'translate(-50%, -50%)',
               }}
-              className="pointer-events-none fixed z-20 flex h-24 w-24 items-center justify-center rounded-full border-2 border-white/55 bg-slate-950/40 shadow-[0_0_24px_rgba(0,0,0,0.45)] backdrop-blur-[1px] sm:h-28 sm:w-28"
+              className="pointer-events-none fixed z-20 flex h-[112px] w-[112px] items-center justify-center sm:h-[126px] sm:w-[126px]"
             >
-              <div className="pointer-events-none absolute inset-3 rounded-full border border-white/20" />
-              <div
-                className="h-10 w-10 rounded-full border-2 border-[#451a03]/80 bg-gradient-to-b from-[#fef08a] to-[#f59e0b] shadow-lg sm:h-11 sm:w-11"
+              <img
+                src="./assets/ui/joystick_base.png"
+                alt=""
+                className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_6px_18px_rgba(0,0,0,0.55)]"
+                draggable={false}
+              />
+              <img
+                src="./assets/ui/joystick_knob.png"
+                alt=""
+                className="pointer-events-none absolute h-[46px] w-[46px] select-none object-contain drop-shadow-[0_4px_12px_rgba(34,211,238,0.65)] sm:h-[52px] sm:w-[52px]"
                 style={{ transform: `translate3d(${stickKnob.x}px, ${stickKnob.y}px, 0)` }}
+                draggable={false}
               />
             </div>
           )}
