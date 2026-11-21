@@ -1,7 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Crosshair,
-  Focus,
   Lock,
   X,
 } from 'lucide-react';
@@ -375,19 +373,25 @@ export const RpgHud: React.FC<RpgHudProps> = ({
 
         {/* Top-Right Utility Medallion Row (Icon-Only: Mouse Lock, Camera Eye View, Fullscreen, Mute, Menu) */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {!showTouchControls && hud.phase === 'playing' && (hud.cameraMode === 'third_back' || hud.cameraMode === 'first_person') && (
+          {!showTouchControls &&
+            hud.phase === 'playing' &&
+            hud.settings.aimMode === 'manual' &&
+            (hud.cameraMode === 'third_back' || hud.cameraMode === 'first_person') && (
             <button
               type="button"
               onClick={onTogglePointerLock}
-              title={hud.pointerLocked ? 'Lepas Kunci Bidik Mouse (Esc / L)' : 'Kunci Mouse untuk Bidik ala PC PUBG (L)'}
+              title={hud.pointerLocked ? 'Lepas Kunci Bidik Mouse (Esc / L)' : 'Kunci Mouse untuk Bidik Bebas PC (L)'}
               aria-label="Kunci Bidik Mouse"
-              className={`relative flex h-9 w-9 items-center justify-center rounded-full border transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10 ${
-                hud.pointerLocked
-                  ? 'border-cyan-300 bg-cyan-950/90 text-cyan-200 ring-2 ring-cyan-400/70'
-                  : 'border-white/25 bg-slate-950/80 text-slate-200 hover:border-cyan-300/60'
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-90 sm:h-10 sm:w-10 ${
+                hud.pointerLocked ? 'scale-105 ring-2 ring-cyan-300' : ''
               }`}
             >
-              <Focus className="h-4 w-4 sm:h-5 sm:w-5" />
+              <img
+                src="./assets/ui/btn_aim_lock.png"
+                alt="Kunci Bidik Mouse"
+                className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_3px_8px_rgba(34,211,238,0.5)]"
+                draggable={false}
+              />
             </button>
           )}
 
@@ -515,10 +519,11 @@ export const RpgHud: React.FC<RpgHudProps> = ({
         </div>
       )}
 
-      {/* Dynamic PUBG-Style Tactical Crosshair & Hit Marker in TPS & FPS Modes */}
+      {/* Dynamic Tactical Crosshair & Hit Marker in Bidik Bebas TPS & FPS Modes */}
       {hud.phase === 'playing' &&
         (hud.cameraMode === 'first_person' ||
-          (hud.cameraMode === 'third_back' &&
+          (hud.settings.aimMode === 'manual' &&
+            hud.cameraMode === 'third_back' &&
             (hud.ownedWeapons.length > 0 || hud.isAiming))) && (() => {
           const gap = hud.isAiming
             ? 4 + hud.crosshairSpread * 5
@@ -1103,20 +1108,27 @@ export const RpgHud: React.FC<RpgHudProps> = ({
           />
         </button>
 
-        {/* Optional ADS / Scope Bidik Button (shows when holding an owned weapon) */}
-        {hud.activeHotbarSlot <= 7 && hud.ownedWeapons.includes(hud.activeWeapon) && (
+        {/* Optional ADS / Scope Bidik Button (shows in Bidik Bebas mode when holding an owned weapon) */}
+        {hud.settings.aimMode === 'manual' &&
+          hud.activeHotbarSlot <= 7 &&
+          hud.ownedWeapons.includes(hud.activeWeapon) && (
           <button
             type="button"
             onClick={onToggleAim}
-            title={hud.isAiming ? 'Keluar Mode Bidik / Scope (Klik Kanan / Q)' : 'Mode Bidik / Scope (Klik Kanan / Q)'}
-            aria-label="Mode Bidik Scope"
-            className={`pointer-events-auto absolute bottom-[92px] right-[86px] flex h-[46px] w-[46px] items-center justify-center rounded-full border-2 shadow-xl backdrop-blur-md transition-transform active:scale-90 sm:bottom-[108px] sm:right-[100px] sm:h-[52px] sm:w-[52px] ${
+            title={hud.isAiming ? 'Keluar Mode Scope (Klik Kanan / Q)' : 'Mode Scope / Bidik Presisi (Klik Kanan / Q)'}
+            aria-label="Mode Scope"
+            className={`pointer-events-auto absolute bottom-[88px] right-[82px] flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform active:scale-90 sm:bottom-[102px] sm:right-[96px] sm:h-[60px] sm:w-[60px] ${
               hud.isAiming
-                ? 'scale-105 border-rose-300 bg-rose-950/90 text-rose-200 ring-2 ring-rose-400/80 shadow-[0_0_16px_rgba(244,63,94,0.6)]'
-                : 'border-cyan-300/70 bg-slate-950/85 text-cyan-200 hover:scale-105 hover:border-cyan-200'
+                ? 'scale-110 ring-2 ring-rose-300 drop-shadow-[0_0_16px_rgba(244,63,94,0.85)]'
+                : 'hover:scale-105'
             }`}
           >
-            <Crosshair className="h-5 w-5 sm:h-6 sm:w-6" />
+            <img
+              src="./assets/ui/btn_scope.png"
+              alt="Mode Scope"
+              className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_5px_14px_rgba(244,63,94,0.55)]"
+              draggable={false}
+            />
           </button>
         )}
 

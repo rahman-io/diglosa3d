@@ -202,8 +202,8 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
     return leg;
   };
 
-  const leftLeg = makeLeg(-0.24);
-  const rightLeg = makeLeg(0.24);
+  const rightLeg = makeLeg(-0.24);
+  const leftLeg = makeLeg(0.24);
   body.add(leftLeg, rightLeg);
 
   const upperBody = new THREE.Group();
@@ -245,10 +245,10 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
   headGroup.add(head);
 
   const eyeMat = palette.getMat(0x0f172a, 'gloss');
-  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.06), eyeMat);
-  leftEye.position.set(-0.2, 0.41, 0.42);
   const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.06), eyeMat);
-  rightEye.position.set(0.2, 0.41, 0.42);
+  rightEye.position.set(-0.2, 0.41, 0.42);
+  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.06), eyeMat);
+  leftEye.position.set(0.2, 0.41, 0.42);
   headGroup.add(leftEye, rightEye);
 
   const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.76, 0.78, 0.1, 14), hatMat);
@@ -296,8 +296,9 @@ export function createHeroAvatar(palette: MaterialPalette): HeroAvatarRig {
     return arm;
   };
 
-  const leftArm = makeArm(-0.62, false);
-  const rightArm = makeArm(0.62, true);
+  // When Hero faces +Z with +Y up, Hero's true RIGHT side is -X and LEFT side is +X
+  const rightArm = makeArm(-0.62, true);
+  const leftArm = makeArm(0.62, false);
   upperBody.add(leftArm, rightArm);
 
   // Dash / Pulse ring
@@ -421,11 +422,11 @@ export function applyHeroWeaponPose(
 
   let targetRightArmX = moving ? swing * 0.55 : breathWave * 0.055;
   let targetRightArmY = 0;
-  let targetRightArmZ = !moving ? 0.03 + breathWave * 0.015 : 0;
+  let targetRightArmZ = !moving ? -0.03 - breathWave * 0.015 : 0;
 
   let targetLeftArmX = moving ? -swing * 0.65 : -breathWave * 0.055;
   let targetLeftArmY = 0;
-  let targetLeftArmZ = !moving ? -0.03 - breathWave * 0.015 : 0;
+  let targetLeftArmZ = !moving ? 0.03 + breathWave * 0.015 : 0;
 
   let targetWeaponPosY = -0.72;
   let targetWeaponPosZ = 0.06;
@@ -436,7 +437,7 @@ export function applyHeroWeaponPose(
     const cls = getWeaponPoseClass(weaponId);
 
     if (cls === 'pistol') {
-      // Tactical Pistol: snappy one/two-hand transition
+      // Tactical Pistol: right-hand trigger grip, left hand cups under right wrist when aiming
       targetUpperY = THREE.MathUtils.lerp(-0.08, -0.18, aimAlpha);
       targetHeadY = -targetUpperY * 0.9;
       targetUpperX = aimAlpha * 0.04 - recoil * 0.06;
@@ -446,7 +447,7 @@ export function applyHeroWeaponPose(
         -1.56 - recoil * 0.34,
         aimAlpha,
       );
-      targetRightArmZ = THREE.MathUtils.lerp(-0.06, -0.14, aimAlpha);
+      targetRightArmZ = THREE.MathUtils.lerp(0.06, 0.14, aimAlpha);
 
       // Left arm swings naturally while walking with pistol, or cups under right wrist when aiming!
       targetLeftArmX = THREE.MathUtils.lerp(
@@ -454,10 +455,10 @@ export function applyHeroWeaponPose(
         -1.36 - recoil * 0.2,
         aimAlpha,
       );
-      targetLeftArmZ = THREE.MathUtils.lerp(0.04, 0.52, aimAlpha);
-      targetWeaponRotY = THREE.MathUtils.lerp(0, 0.14, aimAlpha);
+      targetLeftArmZ = THREE.MathUtils.lerp(-0.04, -0.52, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(0, -0.14, aimAlpha);
     } else if (cls === 'handcannon') {
-      // Golden Revolver: stylized gunslinger stance & strong muzzle flip recoil
+      // Golden Revolver: right-handed gunslinger stance & strong muzzle flip recoil
       targetUpperY = THREE.MathUtils.lerp(-0.22, -0.32, aimAlpha);
       targetHeadY = -targetUpperY * 0.92;
       targetUpperX = -recoil * 0.1;
@@ -467,18 +468,18 @@ export function applyHeroWeaponPose(
         -1.58 - recoil * 0.48,
         aimAlpha,
       );
-      targetRightArmZ = THREE.MathUtils.lerp(-0.1, -0.22, aimAlpha);
+      targetRightArmZ = THREE.MathUtils.lerp(0.1, 0.22, aimAlpha);
 
-      // Counterweight left arm swept behind hip when firing
+      // Counterweight left arm swept outward behind hip when firing
       targetLeftArmX = THREE.MathUtils.lerp(
         moving ? -swing * 0.55 : 0.28,
         0.46 + recoil * 0.18,
         aimAlpha,
       );
-      targetLeftArmZ = THREE.MathUtils.lerp(-0.08, -0.28, aimAlpha);
-      targetWeaponRotY = THREE.MathUtils.lerp(0.05, 0.24, aimAlpha);
+      targetLeftArmZ = THREE.MathUtils.lerp(0.08, 0.28, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(-0.05, -0.24, aimAlpha);
     } else if (cls === 'cqb_smg') {
-      // Drum SMG / Crystal Fang Blaster: tight two-hand CQB stance across chest
+      // Drum SMG / Crystal Fang Blaster: right-handed tight two-hand CQB stance across chest
       targetUpperY = THREE.MathUtils.lerp(-0.2, -0.28, aimAlpha);
       targetHeadY = -targetUpperY * 0.92;
       targetUpperX = THREE.MathUtils.lerp(0.06, 0.11 - recoil * 0.09, aimAlpha);
@@ -488,22 +489,22 @@ export function applyHeroWeaponPose(
         -1.46 - recoil * 0.16,
         aimAlpha,
       );
-      targetRightArmZ = THREE.MathUtils.lerp(-0.2, -0.24, aimAlpha);
-      targetRightArmY = THREE.MathUtils.lerp(0.14, 0.18, aimAlpha);
+      targetRightArmZ = THREE.MathUtils.lerp(0.2, 0.24, aimAlpha);
+      targetRightArmY = THREE.MathUtils.lerp(-0.14, -0.18, aimAlpha);
 
       targetLeftArmX = THREE.MathUtils.lerp(
         -0.9 + (moving ? -swing * 0.1 : 0),
         -1.4 - recoil * 0.14,
         aimAlpha,
       );
-      targetLeftArmZ = THREE.MathUtils.lerp(0.46, 0.54, aimAlpha);
-      targetWeaponRotY = THREE.MathUtils.lerp(0.22, 0.28, aimAlpha);
+      targetLeftArmZ = THREE.MathUtils.lerp(-0.46, -0.54, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(-0.22, -0.28, aimAlpha);
       targetWeaponPosZ = 0.08;
     } else if (cls === 'rifle_twohand') {
-      // Combat Shotgun / Precision Sniper / Sky Railgun: shoulder-mounted two-handed shooter stance!
+      // Combat Shotgun / Precision Sniper / Sky Railgun: right-shoulder two-handed shooter stance!
       targetUpperY = THREE.MathUtils.lerp(-0.34, -0.44, aimAlpha);
       targetHeadY = -targetUpperY * 0.94;
-      targetHeadZ = aimAlpha * 0.08;
+      targetHeadZ = -aimAlpha * 0.08;
       targetHeadX = aimAlpha * 0.06;
       targetUpperX = THREE.MathUtils.lerp(0.04, 0.09 - recoil * 0.14, aimAlpha);
 
@@ -512,29 +513,29 @@ export function applyHeroWeaponPose(
         -1.52 - recoil * 0.24,
         aimAlpha,
       );
-      targetRightArmZ = THREE.MathUtils.lerp(-0.22, -0.26, aimAlpha);
-      targetRightArmY = THREE.MathUtils.lerp(0.18, 0.22, aimAlpha);
+      targetRightArmZ = THREE.MathUtils.lerp(0.22, 0.26, aimAlpha);
+      targetRightArmY = THREE.MathUtils.lerp(-0.18, -0.22, aimAlpha);
 
       targetLeftArmX = THREE.MathUtils.lerp(
         -0.98 + (moving ? -swing * 0.1 : 0),
         -1.46 - recoil * 0.18,
         aimAlpha,
       );
-      targetLeftArmZ = THREE.MathUtils.lerp(0.48, 0.58, aimAlpha);
-      targetLeftArmY = -0.15;
+      targetLeftArmZ = THREE.MathUtils.lerp(-0.48, -0.58, aimAlpha);
+      targetLeftArmY = 0.15;
 
-      targetWeaponRotY = THREE.MathUtils.lerp(0.26, 0.34, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(-0.26, -0.34, aimAlpha);
       targetWeaponPosY = -0.68;
       targetWeaponPosZ = 0.08;
 
       if (!moving && aimAlpha > 0.3) {
-        targetLeftLegZ = -0.1 * aimAlpha;
-        targetRightLegZ = 0.1 * aimAlpha;
-        targetLeftLegX = -0.16 * aimAlpha;
-        targetRightLegX = 0.18 * aimAlpha;
+        targetLeftLegZ = 0.1 * aimAlpha;
+        targetRightLegZ = -0.1 * aimAlpha;
+        targetLeftLegX = 0.18 * aimAlpha;
+        targetRightLegX = -0.16 * aimAlpha;
       }
     } else {
-      // Heavy Triple-Barrel Gatling ('jarum'): low braced hip-carry, left hand gripping top carry bar!
+      // Heavy Triple-Barrel Gatling ('jarum'): right-side braced hip-carry, left hand gripping top carry bar!
       targetUpperY = THREE.MathUtils.lerp(-0.22, -0.28, aimAlpha);
       targetHeadY = -targetUpperY * 0.9;
       targetUpperX = THREE.MathUtils.lerp(-0.08, -0.15 - recoil * 0.1, aimAlpha);
@@ -544,20 +545,20 @@ export function applyHeroWeaponPose(
         -1.15 - recoil * 0.16,
         aimAlpha,
       );
-      targetRightArmZ = -0.18;
+      targetRightArmZ = 0.18;
 
       targetLeftArmX = THREE.MathUtils.lerp(
         -0.98 + (moving ? -swing * 0.08 : 0),
         -1.26 - recoil * 0.14,
         aimAlpha,
       );
-      targetLeftArmZ = THREE.MathUtils.lerp(0.46, 0.56, aimAlpha);
-      targetWeaponRotY = THREE.MathUtils.lerp(0.18, 0.24, aimAlpha);
+      targetLeftArmZ = THREE.MathUtils.lerp(-0.46, -0.56, aimAlpha);
+      targetWeaponRotY = THREE.MathUtils.lerp(-0.18, -0.24, aimAlpha);
       targetWeaponPosY = -0.76;
 
       if (!moving) {
-        targetLeftLegZ = -0.12;
-        targetRightLegZ = 0.12;
+        targetLeftLegZ = 0.12;
+        targetRightLegZ = -0.12;
       }
     }
     // Apply vertical crosshair aim pitch across torso, head, and weapon arms!

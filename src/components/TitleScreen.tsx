@@ -23,6 +23,7 @@ interface TitleScreenProps {
   user: User | null;
   muted: boolean;
   onToggleMute: () => void;
+  disableShortcuts?: boolean;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
@@ -36,6 +37,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   user,
   muted,
   onToggleMute,
+  disableShortcuts = false,
 }) => {
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showInfoSheet, setShowInfoSheet] = useState(false);
@@ -55,7 +57,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (showQuickMenu || showInfoSheet) return;
+      if (disableShortcuts || showQuickMenu || showInfoSheet) return;
       if (e.code === 'Enter' || e.code === 'Space') {
         e.preventDefault();
         if (hasSavedGame) onContinue();
@@ -64,7 +66,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [hasSavedGame, onContinue, onStartNew, showQuickMenu, showInfoSheet]);
+  }, [disableShortcuts, hasSavedGame, onContinue, onStartNew, showQuickMenu, showInfoSheet]);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-3 sm:p-6">

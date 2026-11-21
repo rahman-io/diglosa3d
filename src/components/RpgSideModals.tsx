@@ -31,6 +31,7 @@ import {
 } from '../data/diglosaCatalog';
 import { CATEGORIES, getWordStatus, VOCAB_CATALOG } from '../data/vocabCatalog';
 import {
+  AimMode,
   DifficultyMode,
   FxLevel,
   GameSettings,
@@ -687,6 +688,61 @@ export const RpgSideModals: React.FC<RpgSideModalsProps> = ({
           {/* TAB 5: OPSI & PANDUAN HOOT */}
           {tab === 'options' && (
             <div className="space-y-4">
+              {/* Aim Mode (Bidik Otomatis vs Bidik Bebas) */}
+              <div className="rounded-2xl border-2 border-[#d6b67c] bg-white p-4">
+                <div className="text-xs font-black uppercase text-[#78350f]">
+                  Gaya Membidik &amp; Menembak
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      {
+                        mode: 'auto' as AimMode,
+                        title: 'Bidik Otomatis',
+                        sub: 'Kunci Target Cerdas',
+                        desc: 'Peluru otomatis mengunci & mengarah ke monster terdekat. Santai & praktis.',
+                      },
+                      {
+                        mode: 'manual' as AimMode,
+                        title: 'Bidik Bebas',
+                        sub: 'Crosshair & Scope Presisi',
+                        desc: 'Bidik manual 360° lewat crosshair, lengkap dengan zoom Scope (ADS) & recoil.',
+                      },
+                    ]
+                  ).map((item) => {
+                    const active = hud.settings.aimMode === item.mode;
+                    return (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        onClick={() => onUpdateSettings({ aimMode: item.mode })}
+                        className={`rounded-xl border-2 p-3 text-left transition ${
+                          active
+                            ? 'border-cyan-600 bg-cyan-50/90'
+                            : 'border-[#d6c29f] bg-white hover:bg-[#fffbeb]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-black">{item.title}</span>
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
+                              active
+                                ? 'bg-cyan-600 text-white'
+                                : 'bg-[#f5e3be] text-[#78350f]'
+                            }`}
+                          >
+                            {active ? 'Aktif' : item.sub}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-[#78350f]">
+                          {item.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Difficulty */}
               <div className="rounded-2xl border-2 border-[#d6b67c] bg-white p-4">
                 <div className="text-xs font-black uppercase text-[#78350f]">

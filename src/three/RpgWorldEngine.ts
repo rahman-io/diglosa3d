@@ -34,6 +34,7 @@ import {
   VOCAB_CATALOG,
 } from '../data/vocabCatalog';
 import {
+  AimMode,
   BattleContext,
   CameraMode,
   CaveSealContext,
@@ -464,6 +465,7 @@ export class RpgWorldEngine {
   private ieltsCleared = false;
   private settings: GameSettings = {
     difficulty: 'petualang',
+    aimMode: 'manual',
     storyLocked: true,
     qtimer: true,
     fxLevel: 'full',
@@ -1359,10 +1361,22 @@ export class RpgWorldEngine {
     this.pushHud(true);
   }
 
-  public startNewGame(): void {
+  public startNewGame(aimMode?: AimMode): void {
     this.clearSubScenes();
     this.worldMode = 'overworld';
     this.overworldGroup.visible = true;
+    if (aimMode) {
+      this.settings.aimMode = aimMode;
+    }
+    this.isAiming = false;
+    this.aimToggled = false;
+    this.rightAimHeld = false;
+    this.leftFireHeld = false;
+    this.hudFireHeld = false;
+    this.aimBlend = 0;
+    this.recoilPitch = 0;
+    this.crosshairSpread = 0;
+    this.crosshairOnEnemy = false;
 
     this.xp = 0;
     this.hp = TUNE.hpStart;
@@ -2476,6 +2490,10 @@ export class RpgWorldEngine {
 
   public toggleAimMode(): void {
     if (this.phase !== 'playing') return;
+    if (this.settings.aimMode !== 'manual') {
+      this.showBanner('Mode Bidik Otomatis aktif — ubah ke Bidik Bebas di Menu Opsi untuk Scope!', 2.5);
+      return;
+    }
     if (this.activeHotbarSlot > 7 || !this.ownedWeapons.has(this.activeWeapon)) {
       this.showBanner('Pilih senjata terlebih dahulu untuk membidik (ADS)!', 2.0);
       return;
@@ -2542,6 +2560,21 @@ export class RpgWorldEngine {
   public updateSettings(partial: Partial<GameSettings>): void {
     const prevDiff = this.settings.difficulty;
     this.settings = { ...this.settings, ...partial };
+    if (partial.aimMode === 'auto') {
+      this.isAiming = false;
+      this.aimToggled = false;
+      this.rightAimHeld = false;
+      this.aimBlend = 0;
+      this.recoilPitch = 0;
+      this.crosshairOnEnemy = false;
+      if (document.pointerLockElement === this.renderer.domElement) {
+        try {
+          document.exitPointerLock?.();
+        } catch {
+          // ignore
+        }
+      }
+    }
     if (partial.difficulty && partial.difficulty !== prevDiff) {
       this.syncShootersForDifficulty();
       if (this.worldMode === 'overworld') this.syncOverworldMonstersByDiff();
@@ -4337,12 +4370,15 @@ export class RpgWorldEngine {
     this.shootRecoilTimer = 0.22;
     soundEngine.playShoot();
 
+    const isManualAim = this.settings.aimMode === 'manual';
     const kick = wDef.cooldown >= 0.4 ? 0.032 : wDef.cooldown >= 0.25 ? 0.02 : 0.012;
-    this.recoilPitch = Math.min(0.14, this.recoilPitch + kick * (this.isAiming ? 0.65 : 1.0));
-    this.crosshairSpread = Math.min(
-      1.0,
-      this.crosshairSpread + (wDef.cooldown >= 0.4 ? 0.68 : 0.35),
-    );
+    if (isManualAim) {
+      this.recoilPitch = Math.min(0.14, this.recoilPitch + kick * (this.isAiming ? 0.65 : 1.0));
+      this.crosshairSpread = Math.min(
+        1.0,
+        this.crosshairSpread + (wDef.cooldown >= 0.4 ? 0.68 : 0.35),
+      );
+    }
 
     const poseCls = getWeaponPoseClass(this.activeWeapon);
     const muzzleHeight =
@@ -4355,21 +4391,24 @@ export class RpgWorldEngine {
         : 1.92;
     const muzzleDist =
       poseCls === 'rifle_twohand' || poseCls === 'heavy_gatling' ? 1.45 : 1.15;
+    const muzzleRight = this.cameraMode === 'first_person' ? 0.18 : 0.34;
 
     let aimYaw = this.heroYaw;
     let dirX = Math.sin(aimYaw);
     let dirY = 0;
     let dirZ = Math.cos(aimYaw);
 
-    // PUBG-style manual crosshair aiming in TPS & FPS views!
-    if (this.cameraMode === 'third_back' || this.cameraMode === 'first_person') {
+    if (isManualAim && (this.cameraMode === 'third_back' || this.cameraMode === 'first_person')) {
+      // Bidik Bebas: manual 3D crosshair aiming in TPS & FPS views
       const aim = this.getCrosshairAimInfo();
       aimYaw = Math.atan2(aim.point.x - this.heroPos.x, aim.point.z - this.heroPos.z);
       this.heroYaw = aimYaw;
 
-      const mx0 = this.heroPos.x + Math.sin(aimYaw) * muzzleDist;
+      const mx0 =
+        this.heroPos.x + Math.sin(aimYaw) * muzzleDist - Math.cos(aimYaw) * muzzleRight;
       const my0 = this.heroPos.y + muzzleHeight;
-      const mz0 = this.heroPos.z + Math.cos(aimYaw) * muzzleDist;
+      const mz0 =
+        this.heroPos.z + Math.cos(aimYaw) * muzzleDist + Math.sin(aimYaw) * muzzleRight;
       _v1.set(aim.point.x - mx0, aim.point.y - my0, aim.point.z - mz0);
       const len = _v1.length();
       if (len > 0.08) {
@@ -4382,11 +4421,89 @@ export class RpgWorldEngine {
         dirY = 0;
         dirZ = Math.cos(aimYaw);
       }
+    } else {
+      // Bidik Otomatis: auto-lock nearest enemy within autoAimRange
+      let bestDist = TUNE.autoAimRange;
+      let targetX = 0;
+      let targetY = this.heroPos.y + muzzleHeight;
+      let targetZ = 0;
+      let foundTarget = false;
+
+      if (this.worldMode === 'overworld') {
+        for (const s of this.shooters) {
+          if (!s.alive) continue;
+          const d = Math.hypot(s.x - this.heroPos.x, s.z - this.heroPos.z);
+          if (d < bestDist) {
+            bestDist = d;
+            targetX = s.x;
+            targetY = 1.65;
+            targetZ = s.z;
+            foundTarget = true;
+          }
+        }
+      }
+
+      for (const m of this.getActiveMonsters()) {
+        if (!m.alive) continue;
+        const d = Math.hypot(m.x - this.heroPos.x, m.z - this.heroPos.z);
+        if (d < bestDist) {
+          bestDist = d;
+          targetX = m.x;
+          targetY = (m.y ?? 0) + (m.type === 'kelelawar_gua' ? 0.1 : m.isBoss ? 2.0 : 1.35);
+          targetZ = m.z;
+          foundTarget = true;
+        }
+      }
+
+      if (foundTarget) {
+        aimYaw = Math.atan2(targetX - this.heroPos.x, targetZ - this.heroPos.z);
+        this.heroYaw = aimYaw;
+        const mx0 =
+          this.heroPos.x + Math.sin(aimYaw) * muzzleDist - Math.cos(aimYaw) * muzzleRight;
+        const my0 = this.heroPos.y + muzzleHeight;
+        const mz0 =
+          this.heroPos.z + Math.cos(aimYaw) * muzzleDist + Math.sin(aimYaw) * muzzleRight;
+        _v1.set(targetX - mx0, targetY - my0, targetZ - mz0);
+        const len = _v1.length();
+        if (len > 0.08) {
+          _v1.divideScalar(len);
+          dirX = _v1.x;
+          dirY = _v1.y;
+          dirZ = _v1.z;
+        } else {
+          dirX = Math.sin(aimYaw);
+          dirY = 0;
+          dirZ = Math.cos(aimYaw);
+        }
+      } else if (this.cameraMode === 'first_person') {
+        const aim = this.getCrosshairAimInfo();
+        aimYaw = Math.atan2(aim.point.x - this.heroPos.x, aim.point.z - this.heroPos.z);
+        this.heroYaw = aimYaw;
+        const mx0 =
+          this.heroPos.x + Math.sin(aimYaw) * muzzleDist - Math.cos(aimYaw) * muzzleRight;
+        const my0 = this.heroPos.y + muzzleHeight;
+        const mz0 =
+          this.heroPos.z + Math.cos(aimYaw) * muzzleDist + Math.sin(aimYaw) * muzzleRight;
+        _v1.set(aim.point.x - mx0, aim.point.y - my0, aim.point.z - mz0);
+        const len = _v1.length();
+        if (len > 0.08) {
+          _v1.divideScalar(len);
+          dirX = _v1.x;
+          dirY = _v1.y;
+          dirZ = _v1.z;
+        }
+      } else {
+        dirX = Math.sin(aimYaw);
+        dirY = 0;
+        dirZ = Math.cos(aimYaw);
+      }
     }
 
-    const muzzleX = this.heroPos.x + Math.sin(aimYaw) * muzzleDist;
+    const muzzleX =
+      this.heroPos.x + Math.sin(aimYaw) * muzzleDist - Math.cos(aimYaw) * muzzleRight;
     const muzzleY = this.heroPos.y + muzzleHeight;
-    const muzzleZ = this.heroPos.z + Math.cos(aimYaw) * muzzleDist;
+    const muzzleZ =
+      this.heroPos.z + Math.cos(aimYaw) * muzzleDist + Math.sin(aimYaw) * muzzleRight;
 
     // Subtle bright muzzle spark right at barrel exit
     this.spawnBurst(muzzleX, muzzleY, muzzleZ, wDef.colorHex, 5);
@@ -4614,7 +4731,11 @@ export class RpgWorldEngine {
   private onPointerDown = (e: PointerEvent): void => {
     if (this.phase !== 'playing') return;
     if (e.button === 2) {
-      if (this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon)) {
+      if (
+        this.settings.aimMode === 'manual' &&
+        this.activeHotbarSlot <= 7 &&
+        this.ownedWeapons.has(this.activeWeapon)
+      ) {
         this.rightAimHeld = true;
         this.isAiming = true;
       }
@@ -4919,9 +5040,14 @@ export class RpgWorldEngine {
       }
     }
 
-    // With an armed weapon in TPS, clicking empty view fires at crosshair (PUBG style)!
-    // Otherwise (no weapon yet / orbit mode), Tap-to-Move onto ground plane.
-    if (hasArmedWeapon && this.cameraMode === 'third_back' && e.button === 0) {
+    // With an armed weapon in Bidik Bebas TPS, clicking empty view fires at crosshair;
+    // in Bidik Otomatis mode, clicking empty ground performs classic Tap-to-Move.
+    if (
+      this.settings.aimMode === 'manual' &&
+      hasArmedWeapon &&
+      this.cameraMode === 'third_back' &&
+      e.button === 0
+    ) {
       this.fireActiveWeapon(false);
       return;
     }
@@ -5797,13 +5923,15 @@ export class RpgWorldEngine {
     this.recoilPitch = THREE.MathUtils.damp(this.recoilPitch, 0, 11, dt);
     this.crosshairSpread = THREE.MathUtils.damp(this.crosshairSpread, 0, 9, dt);
 
+    const isManualAim = this.settings.aimMode === 'manual';
     const hasEquippedWeapon =
       this.activeHotbarSlot <= 7 && this.ownedWeapons.has(this.activeWeapon);
-    if (!hasEquippedWeapon && this.isAiming) {
+    if ((!hasEquippedWeapon || !isManualAim) && this.isAiming) {
       this.isAiming = false;
       this.aimToggled = false;
     }
     const wantAds =
+      isManualAim &&
       this.isAiming &&
       hasEquippedWeapon &&
       (this.cameraMode === 'third_back' || this.cameraMode === 'first_person');
@@ -5847,7 +5975,11 @@ export class RpgWorldEngine {
       _v3.set(0, 0, 0).addScaledVector(_forward, mz).addScaledVector(_right, mx);
       if (_v3.lengthSq() > 1) _v3.normalize();
       this.heroVel.addScaledVector(_v3, 76 * sprint * dt);
-      if (this.cameraMode !== 'first_person' && !wantAds && this.shootAimTimer <= 0) {
+      if (
+        this.cameraMode !== 'first_person' &&
+        !wantAds &&
+        (!isManualAim || this.shootAimTimer <= 0)
+      ) {
         const targetYaw = Math.atan2(_v3.x, _v3.z);
         let diff = targetYaw - this.heroYaw;
         while (diff > Math.PI) diff -= Math.PI * 2;
@@ -5863,7 +5995,11 @@ export class RpgWorldEngine {
       } else {
         _v3.set(dx / dist, 0, dz / dist);
         this.heroVel.addScaledVector(_v3, 72 * dt);
-        if (this.cameraMode !== 'first_person' && !wantAds && this.shootAimTimer <= 0) {
+        if (
+          this.cameraMode !== 'first_person' &&
+          !wantAds &&
+          (!isManualAim || this.shootAimTimer <= 0)
+        ) {
           this.heroYaw = Math.atan2(_v3.x, _v3.z);
         }
       }
@@ -5871,7 +6007,7 @@ export class RpgWorldEngine {
 
     if (
       this.cameraMode === 'first_person' ||
-      (this.cameraMode === 'third_back' && (wantAds || this.shootAimTimer > 0))
+      (this.cameraMode === 'third_back' && isManualAim && (wantAds || this.shootAimTimer > 0))
     ) {
       const targetAimYaw = this.cameraYaw + Math.PI;
       let diff = targetAimYaw - this.heroYaw;
@@ -5972,7 +6108,10 @@ export class RpgWorldEngine {
       recoil,
       dt,
       elapsed: this.elapsed,
-      aimPitch: -(this.cameraPitch - this.recoilPitch),
+      aimPitch:
+        isManualAim || this.cameraMode === 'first_person'
+          ? -(this.cameraPitch - this.recoilPitch)
+          : 0,
     });
 
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
@@ -5989,11 +6128,11 @@ export class RpgWorldEngine {
       this.fpSwingTimer = Math.max(0, this.fpSwingTimer - dt);
     }
 
-    // Update Camera Rig (PUBG Over-the-Shoulder TPS + ADS Scope Zoom / FPS / Free Orbit)
+    // Update Camera Rig (Over-the-Shoulder TPS + ADS Scope Zoom when Bidik Bebas, or Centered Classic RPG when Bidik Otomatis)
     const sinY = Math.sin(this.cameraYaw);
     const cosY = Math.cos(this.cameraYaw);
     const effPitch = THREE.MathUtils.clamp(
-      this.cameraPitch - this.recoilPitch,
+      this.cameraPitch - (isManualAim ? this.recoilPitch : 0),
       this.cameraMode === 'first_person' ? -1.12 : -0.58,
       1.12,
     );
@@ -6001,12 +6140,13 @@ export class RpgWorldEngine {
     const sinP = Math.sin(effPitch);
     const targetY = this.heroPos.y + 1.92;
 
-    const targetFov =
-      this.cameraMode === 'first_person'
-        ? THREE.MathUtils.lerp(58, 40, this.aimBlend)
-        : this.cameraMode === 'third_back'
-        ? THREE.MathUtils.lerp(58, 43, this.aimBlend)
-        : 58;
+    const targetFov = !isManualAim
+      ? 58
+      : this.cameraMode === 'first_person'
+      ? THREE.MathUtils.lerp(58, 40, this.aimBlend)
+      : this.cameraMode === 'third_back'
+      ? THREE.MathUtils.lerp(58, 43, this.aimBlend)
+      : 58;
     if (Math.abs(this.camera.fov - targetFov) > 0.06) {
       this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 14, dt);
       this.camera.updateProjectionMatrix();
@@ -6017,16 +6157,18 @@ export class RpgWorldEngine {
       const baseDist =
         this.worldMode === 'dungeon' ? Math.min(this.thirdPersonDist, 6.2) : this.thirdPersonDist;
       const desiredDist =
-        this.cameraMode === 'third_back'
+        isManualAim && this.cameraMode === 'third_back'
           ? THREE.MathUtils.lerp(baseDist, Math.min(baseDist, 3.45), this.aimBlend)
           : baseDist;
 
-      // Offset camera to Hero's right shoulder in TPS so center crosshair is unobstructed!
+      // Offset camera to Hero's right shoulder only in Bidik Bebas TPS so center crosshair stays clear
       const shoulderRight =
-        this.cameraMode === 'third_back' ? THREE.MathUtils.lerp(0.86, 1.06, this.aimBlend) : 0;
+        isManualAim && this.cameraMode === 'third_back'
+          ? THREE.MathUtils.lerp(0.86, 1.06, this.aimBlend)
+          : 0;
       const pivotX = this.heroPos.x + cosY * shoulderRight;
       const pivotY =
-        this.cameraMode === 'third_back'
+        isManualAim && this.cameraMode === 'third_back'
           ? this.heroPos.y + THREE.MathUtils.lerp(2.04, 2.22, this.aimBlend)
           : targetY;
       const pivotZ = this.heroPos.z - sinY * shoulderRight;
@@ -6035,7 +6177,7 @@ export class RpgWorldEngine {
       const dirY = sinP;
       const dirZ = sign * cosY * cosP;
 
-      // Trace spring-arm from Hero center toward desired shoulder-offset camera position
+      // Trace spring-arm from Hero center toward desired camera position
       const goalX = pivotX + dirX * desiredDist;
       const goalY = Math.max(0.75, pivotY + dirY * desiredDist);
       const goalZ = pivotZ + dirZ * desiredDist;
@@ -6066,7 +6208,7 @@ export class RpgWorldEngine {
 
       _v1.set(camX, camY, camZ);
       this.camera.position.lerp(_v1, 1 - Math.exp(-28 * dt));
-      if (this.cameraMode === 'third_back') {
+      if (isManualAim && this.cameraMode === 'third_back') {
         this.camera.lookAt(
           pivotX - dirX * 24,
           pivotY - dirY * 24,
@@ -6103,7 +6245,8 @@ export class RpgWorldEngine {
     }
 
     this.crosshairOnEnemy =
-      (this.cameraMode === 'third_back' || this.cameraMode === 'first_person') && hasEquippedWeapon
+      hasEquippedWeapon &&
+      (this.cameraMode === 'first_person' || (isManualAim && this.cameraMode === 'third_back'))
         ? this.getCrosshairAimInfo().hitEnemy
         : false;
 

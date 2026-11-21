@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import { RotateCw, Smartphone } from 'lucide-react';
 import { soundEngine } from './audio/soundEngine';
+import { AimModeModal } from './components/AimModeModal';
 import { BattleQuizModal } from './components/BattleQuizModal';
 import { CaveCraftingModal } from './components/CaveCraftingModal';
 import { CaveSealModal } from './components/CaveSealModal';
@@ -35,6 +36,7 @@ import {
   setLandscapeOnlyPref,
 } from './utils/fullscreen';
 import {
+  AimMode,
   BattleContext,
   CaveSealContext,
   LeaderboardRecord,
@@ -118,6 +120,7 @@ const INITIAL_HUD: RpgHudSnapshot = {
   storyDialog: null,
   settings: {
     difficulty: 'petualang',
+    aimMode: 'manual',
     storyLocked: false,
     qtimer: true,
     fxLevel: 'full',
@@ -153,6 +156,7 @@ function DiglosaRpgApp() {
   const [craftingOpen, setCraftingOpen] = useState(false);
   const [dialogueNpcId, setDialogueNpcId] = useState<string | null>(null);
   const [sideTab, setSideTab] = useState<SideModalTab>(null);
+  const [aimModePromptOpen, setAimModePromptOpen] = useState(false);
 
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardRecord[]>([]);
@@ -304,6 +308,10 @@ function DiglosaRpgApp() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       if (e.code === 'Escape') {
+        if (aimModePromptOpen) {
+          setAimModePromptOpen(false);
+          return;
+        }
         if (leaderboardOpen) {
           setLeaderboardOpen(false);
           return;
@@ -358,6 +366,7 @@ function DiglosaRpgApp() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    aimModePromptOpen,
     hud.phase,
     leaderboardOpen,
     sideTab,
@@ -451,6 +460,12 @@ function DiglosaRpgApp() {
 
   const handleStartNew = useCallback(() => {
     if (getAlwaysFullscreenPref()) void requestAppFullscreen();
+    setAimModePromptOpen(true);
+  }, []);
+
+  const handleConfirmNewAdventure = useCallback((mode: AimMode) => {
+    if (getAlwaysFullscreenPref()) void requestAppFullscreen();
+    setAimModePromptOpen(false);
     setActiveBattle(null);
     setActiveLearning(null);
     setActiveAcademySkill(null);
@@ -460,7 +475,7 @@ function DiglosaRpgApp() {
     setSideTab(null);
     setCloudSyncNote(null);
     setSyncStatus(null);
-    engineRef.current?.startNewGame();
+    engineRef.current?.startNewGame(mode);
   }, []);
 
   const handleSignIn = useCallback(async () => {
@@ -516,6 +531,7 @@ function DiglosaRpgApp() {
           user={user}
           muted={muted}
           onToggleMute={handleToggleMute}
+          disableShortcuts={aimModePromptOpen || leaderboardOpen || Boolean(sideTab)}
         />
       )}
 
@@ -671,6 +687,13 @@ function DiglosaRpgApp() {
         onQuitToTitle={() => window.location.reload()}
         onOpenLeaderboard={() => setLeaderboardOpen(true)}
         cloudSyncNote={cloudSyncNote}
+      />
+
+      <AimModeModal
+        open={aimModePromptOpen}
+        initialMode={hud.settings.aimMode}
+        onConfirm={handleConfirmNewAdventure}
+        onCancel={() => setAimModePromptOpen(false)}
       />
 
       <LeaderboardModal

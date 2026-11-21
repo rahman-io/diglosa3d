@@ -278,6 +278,7 @@ export const GuideTabContent: React.FC<GuideTabContentProps> = ({ hud }) => {
                 <li>• <strong>Putar Kamera:</strong> Geser jari di <strong>area kanan layar</strong> (bisa bersamaan sambil berjalan!).</li>
                 <li>• <strong>Lompat &amp; Aksi Cepat:</strong> Tekan <strong>⬆️ Lompat</strong> untuk naik tebing/menyeberangi jurang, dan tombol bulat biru kanan bawah untuk <strong>Tembak / Gali / Obor / Pasang / TNT</strong>.</li>
                 <li>• <strong>Pilih Alat/Senjata:</strong> Ketuk kotak Hotbar bawah (<strong>1–8</strong>, <strong>⛏️</strong>, <strong>🔦</strong>, <strong>🧱</strong>, <strong>🧨</strong>).</li>
+                <li>• <strong>Gaya Membidik:</strong> Di <strong>Bidik Otomatis</strong> peluru mengunci musuh terdekat. Di <strong>Bidik Bebas</strong> arahkan crosshair secara manual &amp; tekan tombol <strong>Crosshair</strong> untuk Scope!</li>
                 <li>• <strong>Interaksi:</strong> Ketuk langsung NPC, Meja Craft, Pintu Misi, Peti, atau Balok, atau tekan tombol pop-up kanan bawah.</li>
               </ul>
             </div>
@@ -288,9 +289,10 @@ export const GuideTabContent: React.FC<GuideTabContentProps> = ({ hud }) => {
               </div>
               <ul className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-indigo-950">
                 <li>• <strong>Jalan &amp; Lompat:</strong> Tombol <strong>WASD</strong> / <strong>Panah</strong> untuk jalan · <strong>J</strong> atau <strong>Shift</strong> untuk lompat.</li>
-                <li>• <strong>Kamera:</strong> Geser mouse pada layar · Tekan <strong>C</strong> / <strong>F5</strong> untuk ganti mode (3D Belakang / FPS Minecraft / Depan / Orbit).</li>
+                <li>• <strong>Kamera:</strong> Geser mouse pada layar · Tekan <strong>C</strong> / <strong>F5</strong> untuk ganti mode (3D Belakang / FPS / Depan / Orbit).</li>
+                <li>• <strong>Gaya Membidik (Opsi):</strong> <strong>Bidik Otomatis</strong> (kunci target cerdas) atau <strong>Bidik Bebas</strong> (crosshair 360°, Scope via <strong>Klik Kanan / Q</strong>, kunci mouse via <strong>L</strong>).</li>
                 <li>• <strong>Hotbar:</strong> <strong>1–8</strong> Senjata · <strong>9</strong> Beliung (⛏️) · <strong>0</strong> Obor (🔦) · <strong>B</strong> Blok Pelindung (🧱) · <strong>T</strong> TNT Tambang (🧨).</li>
-                <li>• <strong>Aksi &amp; Interaksi:</strong> <strong>Spasi</strong> (Tembak/Gali/Obor/Pasang/TNT) · <strong>E</strong> (Bicara/Meja Craft/Pintu/Peti/Segel).</li>
+                <li>• <strong>Aksi &amp; Interaksi:</strong> <strong>Spasi</strong> / <strong>Klik Kiri</strong> (Tembak/Gali/Obor/Pasang/TNT) · <strong>E</strong> (Bicara/Meja Craft/Pintu/Peti/Segel).</li>
                 <li>• <strong>Pintasan Menu:</strong> <strong>M</strong> Peta · <strong>H</strong> Petunjuk · <strong>Esc</strong> Jeda/Tutup.</li>
               </ul>
             </div>

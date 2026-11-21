@@ -31,6 +31,7 @@ export type GamePhase =
   | 'gameover';
 
 export type CameraMode = 'third_back' | 'first_person' | 'third_front' | 'orbit';
+export type AimMode = 'auto' | 'manual';
 export type DifficultyMode = 'santai' | 'petualang' | 'pendekar';
 export type LearningModeType = 'cards' | 'quiz' | 'listen' | 'type' | 'match';
 export type FxLevel = 'full' | 'lite' | 'off';
@@ -290,6 +291,7 @@ export interface StoryDialogState {
 
 export interface GameSettings {
   difficulty: DifficultyMode;
+  aimMode: AimMode;
   storyLocked: boolean; // true = Mode Cerita (6 Crowns for Istana), false = Bebas
   qtimer: boolean;
   fxLevel: FxLevel;
